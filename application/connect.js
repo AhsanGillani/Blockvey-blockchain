@@ -5,7 +5,7 @@ const fs = require('fs');
 
 async function getContract() {
     // Load connection profile
-    const ccpPath = path.resolve(__dirname, 'ccp.json'); // make sure ccp.json exists
+    const ccpPath = '/home/ubuntu/active/Blockvey-blockchain/fabric-samples/test-network/organizations/peerOrganizations/org1.example.com/connection-org1.json'; // make sure ccp.json exists
     const ccp = JSON.parse(fs.readFileSync(ccpPath, 'utf8'));
 
     // Setup wallet

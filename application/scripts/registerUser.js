@@ -27,7 +27,7 @@ async function main() {
         }
 
         // Setup CA client
-        const ccpPath = path.resolve(__dirname, '..', 'connection-org1.json');
+        const ccpPath ='/home/ubuntu/active/Blockvey-blockchain/fabric-samples/test-network/organizations/peerOrganizations/org1.example.com/connection-org1.json';
         const ccp = JSON.parse(fs.readFileSync(ccpPath, 'utf8'));
 
         const caInfo = ccp.certificateAuthorities['ca.org1.example.com'];
