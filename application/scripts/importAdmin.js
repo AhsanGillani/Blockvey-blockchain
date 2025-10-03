@@ -19,7 +19,7 @@ async function main() {
         const mspId = 'Org1MSP';
 
         // 🔥 FIXED absolute paths
-        const certPath = '/home/ubuntu/active/Blockvey-blockchain/fabric-samples/test-network/organizations/peerOrganizations/org1.example.com/users/Admin@org1.example.com/msp/signcerts/Admin@org1.example.com-cert.pem';
+        const certPath = '/home/ubuntu/active/Blockvey-blockchain/fabric-samples/test-network/organizations/peerOrganizations/org1.example.com/users/Admin@org1.example.com/msp/signcerts/cert.pem';
         const certificate = fs.readFileSync(certPath).toString();
 
         const keyDirPath = '/home/ubuntu/active/Blockvey-blockchain/fabric-samples/test-network/organizations/peerOrganizations/org1.example.com/users/Admin@org1.example.com/msp/keystore';
