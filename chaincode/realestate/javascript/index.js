@@ -1,3 +1,4 @@
 'use strict';
 const RealEstateContract = require('./lib/realestate-contract');
-module.exports.contracts = [ RealEstateContract ];
+const   PropertyContract =require('./lib/PropertyContract')
+module.exports.contracts = [ RealEstateContract,PropertyContract ];
