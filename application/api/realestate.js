@@ -1,70 +1,133 @@
-const express = require('express');
+const express = require("express");
 const router = express.Router();
-const { getContract } = require('../connect');
+const { getContract } = require("../connect"); // Your Fabric connect method
 
-// Query property by ID
-router.get('/property/:id', async (req, res) => {
-    try {
-        const contract = await getContract(); // <-- must be a Contract
-        const propertyId = req.params.id;
-        const result = await contract.evaluateTransaction('queryProperty', propertyId); // <-- evaluateTransaction for reads
-        res.json(JSON.parse(result.toString()));
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({ error: error.message });
-    }
-});
-
-
-
-
-
-router.post('/property', async (req, res) => {
+//---------------------------------------------------
+// CREATE PROPERTY  -->  createProperty(ctx, id, title, description, owner, createdAt)
+//---------------------------------------------------
+router.post("/property", async (req, res) => {
   try {
-    const { propertyId, owner, location, price, status } = req.body;
+    const { id, title, description, owner, createdAt } = req.body;
+    if (!id || !title || !owner) {
+      return res.status(400).json({ error: "Missing required fields: id, title, owner" });
+    }
 
     const contract = await getContract();
-    
-    // Submit transaction
     const result = await contract.submitTransaction(
-      'addProperty',
-      propertyId,
+      "PropertyContract:createProperty",  // <-- If namespaced
+      id,
+      title,
+      description || "",
       owner,
-      location,
-      price,
-      status
+      createdAt || new Date().toISOString()
     );
 
-    // If chaincode does not return anything, result will be undefined
-    if (result) {
-      res.json({ success: true, data: result.toString() });
-    } else {
-      res.json({ success: true, message: 'Property added successfully' });
-    }
-
+    res.json({ success: true, data: result.toString() });
   } catch (error) {
-    console.error(error);
+    console.error("Error creating property:", error);
     res.status(500).json({ error: error.message });
   }
 });
 
-
-// GET all properties
-router.get('/properties', async (req, res) => {
-    try {
-        const contract = await getContract(); // get contract object
-        const resultBytes = await contract.evaluateTransaction('queryAllProperties');
-        const result = JSON.parse(resultBytes.toString());
-        res.json(result);
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({ error: error.message });
-    }
+//---------------------------------------------------
+// READ PROPERTY --> readProperty(ctx, id)
+//---------------------------------------------------
+router.get("/property/:id", async (req, res) => {
+  try {
+    const contract = await getContract();
+    const result = await contract.evaluateTransaction(
+      "PropertyContract:readProperty",  // <-- If namespaced
+      req.params.id
+    );
+    res.json(JSON.parse(result.toString()));
+  } catch (error) {
+    console.error("Error reading property:", error);
+    res.status(500).json({ error: error.message });
+  }
 });
+
+//---------------------------------------------------
+// PROPERTY HISTORY --> getPropertyHistory(ctx, propertyId)
+//---------------------------------------------------
+router.get("/property/:id/history", async (req, res) => {
+  try {
+    const contract = await getContract();
+    const result = await contract.evaluateTransaction(
+      "PropertyContract:getPropertyHistory",
+      req.params.id
+    );
+    res.json(JSON.parse(result.toString()));
+  } catch (error) {
+    console.error("Error fetching history:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+//---------------------------------------------------
+// CREATE CONTRACT --> createContract(ctx, contractId, propertyId, buyer, seller, terms, signedDate)
+//---------------------------------------------------
+router.post("/contract", async (req, res) => {
+  try {
+    const { contractId, propertyId, buyer, seller, terms, signedDate } = req.body;
+    const contract = await getContract();
+    const result = await contract.submitTransaction(
+      "PropertyContract:createContract",
+      contractId,
+      propertyId,
+      buyer,
+      seller,
+      terms,
+      signedDate || new Date().toISOString()
+    );
+    res.json({ success: true, data: result.toString() });
+  } catch (error) {
+    console.error("Error creating contract:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+//---------------------------------------------------
+// RECORD TRANSACTION --> recordTransaction(ctx, transactionId, propertyId, amount, currency, buyer, seller, date, description)
+//---------------------------------------------------
+router.post("/transaction", async (req, res) => {
+  try {
+    const { transactionId, propertyId, amount, currency, buyer, seller, date, description } = req.body;
+    const contract = await getContract();
+    const result = await contract.submitTransaction(
+      "PropertyContract:recordTransaction",
+      transactionId,
+      propertyId,
+      amount.toString(),
+      currency,
+      buyer,
+      seller,
+      date || new Date().toISOString(),
+      description || ""
+    );
+    res.json({ success: true, data: result.toString() });
+  } catch (error) {
+    console.error("Error recording transaction:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get("/transaction/:id", async (req, res) => {
+  try {
+    const contract = await getContract();
+    const result = await contract.evaluateTransaction(
+      "PropertyContract:getTransactionDetails",
+      req.params.id
+    );
+    res.json(JSON.parse(result.toString()));
+  } catch (error) {
+    console.error("Error reading transaction:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 
 
 
 
 
 module.exports = router;
-
