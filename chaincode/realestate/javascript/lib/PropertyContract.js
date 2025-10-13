@@ -99,6 +99,43 @@ class PropertyContract extends Contract {
 }
 
 
+async updateProperty(ctx, id, title, description, owner) {
+    const exists = await this.propertyExists(ctx, id);
+    if (!exists) {
+        throw new Error(`Property ${id} does not exist`);
+    }
+
+    const propertyData = await this.readProperty(ctx, id);
+
+    // Only update fields that are provided
+    if (title) propertyData.title = title;
+    if (description) propertyData.description = description;
+    if (owner) propertyData.owner = owner;
+    propertyData.status="Updated";
+
+
+    await ctx.stub.putState(id, Buffer.from(JSON.stringify(propertyData)));
+    return JSON.stringify(propertyData);
+}
+
+
+
+
+async transferOwnership(ctx, propertyId, newOwner) {
+    const propertyData = await this.readProperty(ctx, propertyId);
+    if (!propertyData) {
+        throw new Error(`Property ${propertyId} not found`);
+    }
+
+    propertyData.owner = newOwner;
+    propertyData.status = 'OwnershipTransferred';
+
+    await ctx.stub.putState(propertyId, Buffer.from(JSON.stringify(propertyData)));
+    return JSON.stringify(propertyData);
+}
+
+
+
 
 
     
