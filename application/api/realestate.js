@@ -40,18 +40,19 @@ router.get("/property/:id", async (req, res) => {
 });
 
 // ----------------------------
-// UPDATE PROPERTY by ahmed
+// UPDATE PROPERTY
 // ----------------------------
 router.put("/property/:id", async (req, res) => {
   try {
-    const { title, description, owner } = req.body;
+    const { title, description, owner, updatedAt } = req.body;
     const contract = await getContract();
     const result = await contract.submitTransaction(
       "PropertyContract:updateProperty",
       req.params.id,
       title || "",
       description || "",
-      owner || ""
+      owner || "",
+      updatedAt || new Date().toISOString()
     );
     res.json({ success: true, data: JSON.parse(result.toString()) });
   } catch (error) {
@@ -60,16 +61,17 @@ router.put("/property/:id", async (req, res) => {
 });
 
 // ----------------------------
-// TRANSFER OWNERSHIP
+// FINALIZE TRANSFER (contract must be signed, txns completed)
 // ----------------------------
-router.post("/property/:id/transfer", async (req, res) => {
+router.post("/property/:id/finalize", async (req, res) => {
   try {
-    const { newOwner } = req.body;
+    const { contractId, updatedAt } = req.body;
     const contract = await getContract();
     const result = await contract.submitTransaction(
-      "PropertyContract:transferOwnership",
+      "PropertyContract:finalizeTransfer",
       req.params.id,
-      newOwner
+      contractId,
+      updatedAt || new Date().toISOString()
     );
     res.json({ success: true, data: JSON.parse(result.toString()) });
   } catch (error) {
@@ -94,20 +96,20 @@ router.get("/property/:id/history", async (req, res) => {
 });
 
 // ----------------------------
-// CREATE & SIGN CONTRACT
+// GENERATE CONTRACT (by solicitor)
 // ----------------------------
 router.post("/contract", async (req, res) => {
   try {
-    const { contractId, propertyId, buyer, seller, terms, signedDate } = req.body;
+    const { contractId, propertyId, buyer, seller, terms, createdAt } = req.body;
     const contract = await getContract();
     const result = await contract.submitTransaction(
-      "PropertyContract:createContract",
-      contractId,
+      "PropertyContract:solicitorGenerateContract",
       propertyId,
+      contractId,
       buyer,
       seller,
-      terms,
-      signedDate || new Date().toISOString()
+      typeof terms === "string" ? terms : JSON.stringify(terms || {}),
+      createdAt || new Date().toISOString()
     );
     res.json({ success: true, data: JSON.parse(result.toString()) });
   } catch (error) {
@@ -116,22 +118,41 @@ router.post("/contract", async (req, res) => {
 });
 
 // ----------------------------
-// RECORD TRANSACTION
+// SIGN CONTRACT
+// ----------------------------
+router.post("/contract/:id/sign", async (req, res) => {
+  try {
+    const { signerId, signedAt } = req.body;
+    const contract = await getContract();
+    const result = await contract.submitTransaction(
+      "PropertyContract:signContract",
+      req.params.id,
+      signerId,
+      signedAt || new Date().toISOString()
+    );
+    res.json({ success: true, data: JSON.parse(result.toString()) });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ----------------------------
+// RECORD ESCROW/PAYMENT TRANSACTION
 // ----------------------------
 router.post("/transaction", async (req, res) => {
   try {
-    const { transactionId, propertyId, amount, currency, buyer, seller, date, description } = req.body;
+    const { transactionId, propertyId, from, to, amount, currency, step, createdAt } = req.body;
     const contract = await getContract();
     const result = await contract.submitTransaction(
-      "PropertyContract:recordTransaction",
+      "PropertyContract:recordEscrowTransaction",
       transactionId,
       propertyId,
+      from,
+      to,
       amount.toString(),
       currency,
-      buyer,
-      seller,
-      date || new Date().toISOString(),
-      description || ""
+      step,
+      createdAt || new Date().toISOString()
     );
     res.json({ success: true, data: JSON.parse(result.toString()) });
   } catch (error) {
@@ -147,6 +168,161 @@ router.get("/transaction/:id", async (req, res) => {
     const contract = await getContract();
     const result = await contract.evaluateTransaction(
       "PropertyContract:getTransactionDetails",
+      req.params.id
+    );
+    res.json(JSON.parse(result.toString()));
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ----------------------------
+// APPROVE TRANSACTION
+// ----------------------------
+router.post("/transaction/:id/approve", async (req, res) => {
+  try {
+    const { approverId, completedAt } = req.body;
+    const contract = await getContract();
+    const result = await contract.submitTransaction(
+      "PropertyContract:approveTransaction",
+      req.params.id,
+      approverId,
+      completedAt || new Date().toISOString()
+    );
+    res.json({ success: true, data: JSON.parse(result.toString()) });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ----------------------------
+// KYC: SUBMIT
+// ----------------------------
+router.post("/kyc", async (req, res) => {
+  try {
+    const { partyId, kycId, type, kycData, propertyId, createdAt } = req.body;
+    const contract = await getContract();
+    const result = await contract.submitTransaction(
+      "PropertyContract:submitKyc",
+      partyId,
+      kycId,
+      type,
+      typeof kycData === "string" ? kycData : JSON.stringify(kycData || {}),
+      propertyId,
+      createdAt || new Date().toISOString()
+    );
+    res.json({ success: true, data: JSON.parse(result.toString()) });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ----------------------------
+// KYC: SOLICITOR APPROVE/REJECT
+// ----------------------------
+router.post("/kyc/:id/decision", async (req, res) => {
+  try {
+    const { approverId, decision, comment, approvedAt } = req.body;
+    const contract = await getContract();
+    const result = await contract.submitTransaction(
+      "PropertyContract:solicitorApproveKyc",
+      req.params.id,
+      approverId || "",
+      decision,
+      comment || "",
+      approvedAt || new Date().toISOString()
+    );
+    res.json({ success: true, data: JSON.parse(result.toString()) });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ----------------------------
+// ATTACH PARTICIPANTS
+// ----------------------------
+router.post("/property/:id/attach-seller-solicitor", async (req, res) => {
+  try {
+    const { solicitorId, createdAt } = req.body;
+    const contract = await getContract();
+    const result = await contract.submitTransaction(
+      "PropertyContract:attachSolicitorToSeller",
+      req.params.id,
+      solicitorId,
+      createdAt || new Date().toISOString()
+    );
+    res.json({ success: true, data: JSON.parse(result.toString()) });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post("/property/:id/attach-buyer-solicitor", async (req, res) => {
+  try {
+    const { solicitorId, createdAt } = req.body;
+    const contract = await getContract();
+    const result = await contract.submitTransaction(
+      "PropertyContract:attachSolicitorToBuyer",
+      req.params.id,
+      solicitorId,
+      createdAt || new Date().toISOString()
+    );
+    res.json({ success: true, data: JSON.parse(result.toString()) });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post("/property/:id/attach-buyer", async (req, res) => {
+  try {
+    const { buyerId, updatedAt } = req.body;
+    const contract = await getContract();
+    const result = await contract.submitTransaction(
+      "PropertyContract:attachBuyerToProperty",
+      req.params.id,
+      buyerId,
+      updatedAt || new Date().toISOString()
+    );
+    res.json({ success: true, data: JSON.parse(result.toString()) });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ----------------------------
+// QUERY HELPERS
+// ----------------------------
+router.get("/contract/:id", async (req, res) => {
+  try {
+    const contract = await getContract();
+    const result = await contract.evaluateTransaction(
+      "PropertyContract:queryContract",
+      req.params.id
+    );
+    res.json(JSON.parse(result.toString()));
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get("/kyc/:id", async (req, res) => {
+  try {
+    const contract = await getContract();
+    const result = await contract.evaluateTransaction(
+      "PropertyContract:queryKyc",
+      req.params.id
+    );
+    res.json(JSON.parse(result.toString()));
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get("/txn/:id", async (req, res) => {
+  try {
+    const contract = await getContract();
+    const result = await contract.evaluateTransaction(
+      "PropertyContract:queryTransaction",
       req.params.id
     );
     res.json(JSON.parse(result.toString()));

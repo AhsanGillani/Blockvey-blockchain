@@ -1,18 +1,25 @@
 'use strict';
 
 const { Contract } = require('fabric-contract-api');
+const crypto = require('crypto');
+
+function genId(prefix) {
+    // prefix-<timestamp>-<randomhex>
+    return `${prefix}-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
+}
 
 class PropertyContract extends Contract {
 
     // ----------------------------
-    // Create Property
+    // Create Property (caller supplies id)
     // ----------------------------
-    async createProperty(ctx, id, title, description, owner,createdAt) {
+    async createProperty(ctx, id, title, description, owner, createdAt) {
         const exists = await this.propertyExists(ctx, id);
         if (exists) {
             throw new Error(`Property ${id} already exists`);
         }
 
+        const now = createdAt || new Date().toISOString();
         const property = {
             id,
             title,
@@ -20,27 +27,146 @@ class PropertyContract extends Contract {
             owner,
             status: 'Created',
             contractId: '',
-            transactions: [],
-            createdAt,
+            kycId: { seller: null, buyer: null },
+            transactions: [],         // will hold TXN IDs
+            kyc: { seller: null, buyer: null },
+            participants: {
+                seller: { id: owner, solicitor: null },
+                buyer: { id: '', solicitor: null }
+            },
+            createdAt: now,
+            updatedAt: now
         };
 
-        await ctx.stub.putState(id, Buffer.from(JSON.stringify(property)));
+        await ctx.stub.putState(`PROPERTY::${id}`, Buffer.from(JSON.stringify(property)));
         return JSON.stringify(property);
     }
 
     // ----------------------------
-    // Create and Sign Contract
+    // Update Property (metadata and/or owner)
     // ----------------------------
-    async createContract(ctx, contractId, propertyId, buyer, seller, terms,signedDate) {
-        const exists = await this.contractExists(ctx, contractId);
-        if (exists) {
-            throw new Error(`Contract ${contractId} already exists`);
+    async updateProperty(ctx, id, title, description, owner,updatedAt) {
+        const property = await this._getProperty(ctx, id);
+
+        if (title) property.title = title;
+        if (description) property.description = description;
+        if (owner) property.owner = owner;
+
+        property.status = 'Updated';
+        property.updatedAt = updatedAt || new Date().toISOString();
+
+        await ctx.stub.putState(`PROPERTY::${id}`, Buffer.from(JSON.stringify(property)));
+        return JSON.stringify(property);
+    }
+
+    // ----------------------------
+    // Submit KYC (auto-generate KYC id)
+    // ----------------------------
+    // kycJson must be a string (JSON string) or will be stringified
+    async submitKyc(ctx, partyId,kycId, type, kycJson, propertyId,createdAt) {
+        // type: 'seller' or 'buyer'
+        if (!partyId || !type) throw new Error('partyId and type required');
+
+        const payload = (typeof kycJson === 'string') ? JSON.parse(kycJson) : kycJson;
+
+        const kyc = {
+            id: kycId,
+            partyId,
+            type,
+            data: payload,
+            status: 'Submitted',
+            submittedBy: ctx.clientIdentity.getID(),
+            createdAt,
         }
 
-        const propertyData = await this.readProperty(ctx, propertyId);
-        if (!propertyData) {
-            throw new Error(`Property ${propertyId} not found`);
-        }
+        await ctx.stub.putState(`KYC::${kycId}`, Buffer.from(JSON.stringify(kyc)));
+
+        // link to property
+        const property = await this._getProperty(ctx, propertyId);
+        property.kyc = property.kyc || {};
+        property.kyc[type] = kycId;
+        property.status = 'KYCSubmitted';
+        property.kycId[type] = kycId;
+        property.updatedAt = createdAt;
+        await ctx.stub.putState(`PROPERTY::${propertyId}`, Buffer.from(JSON.stringify(property)));
+
+        return JSON.stringify({ kycId, kyc });
+    }
+
+    // ----------------------------
+    // Attach solicitor for seller
+    // ----------------------------
+    async attachSolicitorToSeller(ctx, propertyId, solicitorId,createdAt) {
+        const property = await this._getProperty(ctx, propertyId);
+        property.participants = property.participants || {};
+        property.participants.seller = property.participants.seller || {};
+        property.participants.seller.solicitor = solicitorId;
+        property.status = 'SellerSolicitorAttached';
+        property.updatedAt = createdAt;
+        await ctx.stub.putState(`PROPERTY::${propertyId}`, Buffer.from(JSON.stringify(property)));
+        return JSON.stringify(property);
+    }
+
+    // ----------------------------
+    // Attach solicitor for buyer
+    // ----------------------------
+    async attachSolicitorToBuyer(ctx, propertyId, solicitorId,createdAt) {
+        const property = await this._getProperty(ctx, propertyId);
+        property.participants = property.participants || {};
+        property.participants.buyer = property.participants.buyer || {};
+        property.participants.buyer.solicitor = solicitorId;
+        property.status = 'BuyerSolicitorAttached';
+        property.updatedAt = createdAt;
+        await ctx.stub.putState(`PROPERTY::${propertyId}`, Buffer.from(JSON.stringify(property)));
+        return JSON.stringify(property);
+    }
+
+    // ----------------------------
+    // Solicitor approves KYC
+    // ----------------------------
+    async solicitorApproveKyc(ctx, kycId, approverId, decision, comment,approvedAt) {
+        // decision: 'approve' or 'reject'
+        const kycKey = `KYC::${kycId}`;
+        const data = await ctx.stub.getState(kycKey);
+        if (!data || data.length === 0) throw new Error(`KYC ${kycId} does not exist`);
+
+        const kyc = JSON.parse(data.toString());
+        kyc.status = (decision === 'approve') ? 'Approved' : 'Rejected';
+        kyc.approvedBy = approverId || ctx.clientIdentity.getID();
+        kyc.approvalComment = comment || '';
+        kyc.timestamps = kyc.timestamps || {};
+        kyc.timestamps.approvedAt = approvedAt;
+
+        await ctx.stub.putState(kycKey, Buffer.from(JSON.stringify(kyc)));
+
+        // Optionally update property KYC pointer(s)
+        // find properties where partyId matches and update property.kyc.<type>
+        // For simplicity caller can manage property linking; you may extend to search.
+
+        return JSON.stringify(kyc);
+    }
+
+    // ----------------------------
+    // Attach buyer to property (pre-contract)
+    // ----------------------------
+    async attachBuyerToProperty(ctx, propertyId, buyerId,updatedAt) {
+        const property = await this._getProperty(ctx, propertyId);
+        property.participants = property.participants || {};
+        property.participants.buyer = property.participants.buyer || {};
+        property.participants.buyer.id = buyerId;
+        property.updatedAt = updatedAt;
+        await ctx.stub.putState(`PROPERTY::${propertyId}`, Buffer.from(JSON.stringify(property)));
+        return JSON.stringify(property);
+    }
+
+    // ----------------------------
+    // Solicitor generates contract (auto contract id)
+    // ----------------------------
+    async solicitorGenerateContract(ctx, propertyId,contractId, buyer, seller, terms,createdAt) {
+        const contractKey = `CONTRACT::${contractId}`;
+
+        const exists = await ctx.stub.getState(contractKey);
+        if (exists && exists.length) throw new Error(`Contract ${contractId} already exists`);
 
         const contract = {
             id: contractId,
@@ -48,123 +174,188 @@ class PropertyContract extends Contract {
             buyer,
             seller,
             terms,
-            signed: true,
-            signedDate,
+            signatures: { buyer: false, seller: false, buyerSolicitor: false, sellerSolicitor: false },
+            status: 'Draft',
+            createdAt: createdAt || new Date().toISOString(),
+            signedAt: null
         };
 
-        await ctx.stub.putState(contractId, Buffer.from(JSON.stringify(contract)));
+        await ctx.stub.putState(contractKey, Buffer.from(JSON.stringify(contract)));
 
-        propertyData.status = 'UnderContract';
-        propertyData.contractId = contractId;
+        // link to property
+        const property = await this._getProperty(ctx, propertyId);
+        property.contractId = contractId;
+        property.status = 'UnderContract';
+        property.updatedAt = createdAt;
+        await ctx.stub.putState(`PROPERTY::${propertyId}`, Buffer.from(JSON.stringify(property)));
 
-        await ctx.stub.putState(propertyId, Buffer.from(JSON.stringify(propertyData)));
         return JSON.stringify(contract);
     }
 
     // ----------------------------
-    // Record Transaction
+    // Sign Contract
+    // signerId must be one of the contract participant ids or solicitor ids
     // ----------------------------
-    async recordTransaction(ctx, transactionId, propertyId, amount, currency, buyer, seller,date, description) {
-        const propertyData = await this.readProperty(ctx, propertyId);
-        if (!propertyData) {
-            throw new Error(`Property ${propertyId} not found`);
+    async signContract(ctx, contractId, signerId,signedAt) {
+        const contractKey = `CONTRACT::${contractId}`;
+        const data = await ctx.stub.getState(contractKey);
+        if (!data || data.length === 0) throw new Error(`Contract ${contractId} not found`);
+        const contract = JSON.parse(data.toString());
+
+        // Map signer to signature role. In production you must check ctx.clientIdentity
+        if (signerId === contract.buyer) contract.signatures.buyer = true;
+        else if (signerId === contract.seller) contract.signatures.seller = true;
+        else if (signerId === (contract.buyer + '_sol') || signerId === contract.buyerSolicitor) contract.signatures.buyerSolicitor = true;
+        else if (signerId === (contract.seller + '_sol') || signerId === contract.sellerSolicitor) contract.signatures.sellerSolicitor = true;
+        else {
+            // Accept generic signer mapping if they pass exact role key
+            // For safety you might accept param 'role' instead of signerId
+            throw new Error(`Signer ${signerId} not recognized as participant for contract ${contractId}`);
         }
 
-        const transaction = {
-            id: transactionId,
+        // check if all signatures done
+        const allSigned = Object.values(contract.signatures).every(v => v === true);
+        if (allSigned) {
+            contract.status = 'Signed';
+            contract.signedAt = signedAt;
+            // emit event
+            await ctx.stub.setEvent('ContractSigned', Buffer.from(JSON.stringify({ contractId })));
+        }
+
+        await ctx.stub.putState(contractKey, Buffer.from(JSON.stringify(contract)));
+        return JSON.stringify(contract);
+    }
+
+    // ----------------------------
+    // Record Escrow / Payment transaction (auto txn id)
+    // ----------------------------
+    async recordEscrowTransaction(ctx,txnId,propertyId, from, to, amount, currency, step,createdAt) {
+        const key = `TXN::${txnId}`;
+        
+        // Check if transaction already exists
+        const exists = await ctx.stub.getState(key);
+        if (exists && exists.length > 0) {
+            throw new Error(`Transaction ${txnId} already exists`);
+        }
+        
+        const txn = {
+            id: txnId,
             propertyId,
+            from,
+            to,
             amount: parseFloat(amount),
             currency,
-            buyer,
-            seller,
-            date, // Use client-provided timestamp,
-            description,
+            step, // e.g., "buyer_to_buyerSol"
+            status: 'Pending',
+            approvals: {},
+            createdAt: createdAt,
+            completedAt: null
         };
 
-        await ctx.stub.putState(transactionId, Buffer.from(JSON.stringify(transaction)));
+        await ctx.stub.putState(key, Buffer.from(JSON.stringify(txn)));
 
-        propertyData.transactions.push(transactionId);
-        propertyData.status = 'Completed';
+        // Optionally link to property by searching (caller can pass propertyId elsewhere). For convenience we do NOT link here.
+        const property = await this._getProperty(ctx, propertyId);
+        property.transactions.push(txnId);
+        property.updatedAt = createdAt;
+        await ctx.stub.putState(`PROPERTY::${propertyId}`, Buffer.from(JSON.stringify(property)));  
+        // emit event
+        await ctx.stub.setEvent('TransactionRecorded', Buffer.from(JSON.stringify({ txnId })));
 
-        await ctx.stub.putState(propertyId, Buffer.from(JSON.stringify(propertyData)));
-        return JSON.stringify(transaction);
+        return JSON.stringify(txn);
     }
-
-    async getTransactionDetails(ctx, transactionId) {
-    const data = await ctx.stub.getState(transactionId);
-    if (!data || data.length === 0) {
-        throw new Error(`Transaction ${transactionId} does not exist`);
-    }
-    return data.toString();  // Already stored as JSON string
-}
-
-
-async updateProperty(ctx, id, title, description, owner) {
-    const exists = await this.propertyExists(ctx, id);
-    if (!exists) {
-        throw new Error(`Property ${id} does not exist`);
-    }
-
-    const propertyData = await this.readProperty(ctx, id);
-
-    // Only update fields that are provided
-    if (title) propertyData.title = title;
-    if (description) propertyData.description = description;
-    if (owner) propertyData.owner = owner;
-    propertyData.status="Updated";
-
-
-    await ctx.stub.putState(id, Buffer.from(JSON.stringify(propertyData)));
-    return JSON.stringify(propertyData);
-}
-
-
-
-
-async transferOwnership(ctx, propertyId, newOwner) {
-    const propertyData = await this.readProperty(ctx, propertyId);
-    if (!propertyData) {
-        throw new Error(`Property ${propertyId} not found`);
-    }
-
-    propertyData.owner = newOwner;
-    propertyData.status = 'OwnershipTransferred';
-
-    await ctx.stub.putState(propertyId, Buffer.from(JSON.stringify(propertyData)));
-    return JSON.stringify(propertyData);
-}
-
-
-
-
-
-    
-
-
-
 
     // ----------------------------
-    // Read Property
+    // Approve Transaction by approverId
+    // ----------------------------
+    async approveTransaction(ctx, txnId, approverId,completedAt) {
+        const key = `TXN::${txnId}`;
+        const data = await ctx.stub.getState(key);
+        if (!data || data.length === 0) throw new Error(`Transaction ${txnId} not found`);
+        const txn = JSON.parse(data.toString());
+
+        txn.approvals = txn.approvals || {};
+        txn.approvals[approverId] = true;
+
+        // Business rule: mark Completed when approvals by receiver are present.
+        // This is customizable. For demonstration, mark Completed when at least one approval exists.
+        const approvalsCount = Object.keys(txn.approvals).length;
+        if (approvalsCount >= 1) {
+            txn.status = 'Completed';
+            txn.completedAt = completedAt;
+        }
+
+        await ctx.stub.putState(key, Buffer.from(JSON.stringify(txn)));
+        return JSON.stringify(txn);
+    }
+
+    // ----------------------------
+    // Finalize Transfer (checks contract signed & transactions completed)
+    // ----------------------------
+    async finalizeTransfer(ctx, propertyId, contractId,updatedAt) {
+        const property = await this._getProperty(ctx, propertyId);
+        if (!property) throw new Error(`Property ${propertyId} not found`);
+
+        // check contract
+        const contractKey = `CONTRACT::${contractId}`;
+        const cdata = await ctx.stub.getState(contractKey);
+        if (!cdata || cdata.length === 0) throw new Error(`Contract ${contractId} not found`);
+        const contract = JSON.parse(cdata.toString());
+        if (contract.status !== 'Signed') throw new Error('Contract not fully signed');
+
+        // check all transactions referenced in property.transactions
+        for (const txnId of property.transactions || []) {
+            const tdata = await ctx.stub.getState(`TXN::${txnId}`);
+            if (!tdata || tdata.length === 0) throw new Error(`TXN ${txnId} missing`);
+            const txn = JSON.parse(tdata.toString());
+            if (txn.status !== 'Completed') throw new Error(`TXN ${txnId} not completed`);
+        }
+
+        // transfer ownership
+        property.owner = contract.buyer;
+        property.status = 'Completed';
+        property.updatedAt = updatedAt;
+
+        await ctx.stub.putState(`PROPERTY::${propertyId}`, Buffer.from(JSON.stringify(property)));
+
+        // emit event
+        await ctx.stub.setEvent('OwnershipTransferred', Buffer.from(JSON.stringify({ propertyId, newOwner: contract.buyer })));
+
+        return JSON.stringify(property);
+    }
+
+    // ----------------------------
+    // Get Transaction Details
+    // ----------------------------
+    async getTransactionDetails(ctx, txnId) {
+        const data = await ctx.stub.getState(`TXN::${txnId}`);
+        if (!data || data.length === 0) throw new Error(`Transaction ${txnId} does not exist`);
+        return data.toString();
+    }
+
+    // ----------------------------
+    // Read Property (helper)
     // ----------------------------
     async readProperty(ctx, id) {
-        const data = await ctx.stub.getState(id);
-        if (!data || data.length === 0) {
-            throw new Error(`Property ${id} does not exist`);
-        }
-        return JSON.parse(data.toString());
+        return await this._getProperty(ctx, id);
     }
 
     // ----------------------------
     // Get Complete Ledger for Property
     // ----------------------------
     async getPropertyHistory(ctx, propertyId) {
-        const iterator = await ctx.stub.getHistoryForKey(propertyId);
+        const iterator = await ctx.stub.getHistoryForKey(`PROPERTY::${propertyId}`);
         const history = [];
 
         while (true) {
             const res = await iterator.next();
             if (res.value && res.value.value.toString()) {
-                const record = JSON.parse(res.value.value.toString('utf8'));
+                let record;
+                try {
+                    record = JSON.parse(res.value.value.toString('utf8'));
+                } catch (e) {
+                    record = res.value.value.toString('utf8');
+                }
                 history.push({
                     txId: res.value.tx_id,
                     timestamp: res.value.timestamp,
@@ -181,16 +372,42 @@ async transferOwnership(ctx, propertyId, newOwner) {
     }
 
     // ----------------------------
-    // Utility Functions
+    // Query helpers
+    // ----------------------------
+    async queryContract(ctx, contractId) {
+        const data = await ctx.stub.getState(`CONTRACT::${contractId}`);
+        if (!data || data.length === 0) throw new Error(`Contract ${contractId} not found`);
+        return data.toString();
+    }
+
+    async queryKyc(ctx, kycId) {
+        const data = await ctx.stub.getState(`KYC::${kycId}`);
+        if (!data || data.length === 0) throw new Error(`KYC ${kycId} not found`);
+        return data.toString();
+    }
+
+    async queryTransaction(ctx, txnId) {
+        return await this.getTransactionDetails(ctx, txnId);
+    }
+
+    // ----------------------------
+    // Utility / internal functions
     // ----------------------------
     async propertyExists(ctx, id) {
-        const data = await ctx.stub.getState(id);
+        const data = await ctx.stub.getState(`PROPERTY::${id}`);
         return data && data.length > 0;
     }
 
     async contractExists(ctx, id) {
-        const data = await ctx.stub.getState(id);
+        const data = await ctx.stub.getState(`CONTRACT::${id}`);
         return data && data.length > 0;
+    }
+
+    // internal helper to read property with key namespace
+    async _getProperty(ctx, id) {
+        const data = await ctx.stub.getState(`PROPERTY::${id}`);
+        if (!data || data.length === 0) throw new Error(`Property ${id} does not exist`);
+        return JSON.parse(data.toString());
     }
 }
 
