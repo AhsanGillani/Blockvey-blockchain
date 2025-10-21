@@ -2,19 +2,45 @@ const express = require("express");
 const router = express.Router();
 const { getContract } = require("../connect");
 
+// API Key middleware
+const API_KEY = "patronecs001";
+
+const authenticateApiKey = (req, res, next) => {
+  const apiKey = req.headers['api-key'] || req.headers['x-api-key'];
+  
+  if (!apiKey) {
+    return res.status(401).json({ 
+      error: "API key is required. Please provide 'api-key' header." 
+    });
+  }
+  
+  if (apiKey !== API_KEY) {
+    return res.status(403).json({ 
+      error: "Invalid API key. Access denied." 
+    });
+  }
+  
+  next();
+};
+
+// Apply API key authentication to all routes
+router.use(authenticateApiKey);
+
 // ----------------------------
 // CREATE PROPERTY
 // ----------------------------
 router.post("/property", async (req, res) => {
   try {
-    const { id, title, description, owner, createdAt } = req.body;
+    const { id, title, description, sellerId, sellerName, sellerEmail, createdAt } = req.body;
     const contract = await getContract();
     const result = await contract.submitTransaction(
       "PropertyContract:createProperty",
       id,
       title,
       description || "",
-      owner,
+      sellerId,
+      sellerName,
+      sellerEmail,
       createdAt || new Date().toISOString()
     );
     res.json({ success: true, data: JSON.parse(result.toString()) });
@@ -44,7 +70,22 @@ router.get("/property/:id", async (req, res) => {
 // ----------------------------
 router.put("/property/:id", async (req, res) => {
   try {
-    const { title, description, owner, updatedAt } = req.body;
+    const { 
+      title, 
+      description, 
+      owner, 
+      sellerName, 
+      sellerEmail, 
+      sellerSolicitorId, 
+      sellerSolicitorName, 
+      sellerSolicitorEmail, 
+      buyerName, 
+      buyerEmail, 
+      buyerSolicitorId, 
+      buyerSolicitorName, 
+      buyerSolicitorEmail, 
+      updatedAt 
+    } = req.body;
     const contract = await getContract();
     const result = await contract.submitTransaction(
       "PropertyContract:updateProperty",
@@ -52,6 +93,16 @@ router.put("/property/:id", async (req, res) => {
       title || "",
       description || "",
       owner || "",
+      sellerName || "",
+      sellerEmail || "",
+      sellerSolicitorId || "",
+      sellerSolicitorName || "",
+      sellerSolicitorEmail || "",
+      buyerName || "",
+      buyerEmail || "",
+      buyerSolicitorId || "",
+      buyerSolicitorName || "",
+      buyerSolicitorEmail || "",
       updatedAt || new Date().toISOString()
     );
     res.json({ success: true, data: JSON.parse(result.toString()) });
@@ -100,14 +151,12 @@ router.get("/property/:id/history", async (req, res) => {
 // ----------------------------
 router.post("/contract", async (req, res) => {
   try {
-    const { contractId, propertyId, buyer, seller, terms, createdAt } = req.body;
+    const { contractId, propertyId, terms, createdAt } = req.body;
     const contract = await getContract();
     const result = await contract.submitTransaction(
       "PropertyContract:solicitorGenerateContract",
       propertyId,
       contractId,
-      buyer,
-      seller,
       typeof terms === "string" ? terms : JSON.stringify(terms || {}),
       createdAt || new Date().toISOString()
     );
@@ -122,12 +171,12 @@ router.post("/contract", async (req, res) => {
 // ----------------------------
 router.post("/contract/:id/sign", async (req, res) => {
   try {
-    const { signerId, signedAt } = req.body;
+    const { signerEmail, signedAt } = req.body;
     const contract = await getContract();
     const result = await contract.submitTransaction(
       "PropertyContract:signContract",
       req.params.id,
-      signerId,
+      signerEmail,
       signedAt || new Date().toISOString()
     );
     res.json({ success: true, data: JSON.parse(result.toString()) });
@@ -141,14 +190,16 @@ router.post("/contract/:id/sign", async (req, res) => {
 // ----------------------------
 router.post("/transaction", async (req, res) => {
   try {
-    const { transactionId, propertyId, from, to, amount, currency, step, createdAt } = req.body;
+    const { transactionId, propertyId, fromEmail, fromName, toEmail, toName, amount, currency, step, createdAt } = req.body;
     const contract = await getContract();
     const result = await contract.submitTransaction(
       "PropertyContract:recordEscrowTransaction",
       transactionId,
       propertyId,
-      from,
-      to,
+      fromEmail,
+      fromName,
+      toEmail,
+      toName,
       amount.toString(),
       currency,
       step,
@@ -181,12 +232,12 @@ router.get("/transaction/:id", async (req, res) => {
 // ----------------------------
 router.post("/transaction/:id/approve", async (req, res) => {
   try {
-    const { approverId, completedAt } = req.body;
+    const { approverEmail, completedAt } = req.body;
     const contract = await getContract();
     const result = await contract.submitTransaction(
       "PropertyContract:approveTransaction",
       req.params.id,
-      approverId,
+      approverEmail,
       completedAt || new Date().toISOString()
     );
     res.json({ success: true, data: JSON.parse(result.toString()) });
@@ -243,12 +294,14 @@ router.post("/kyc/:id/decision", async (req, res) => {
 // ----------------------------
 router.post("/property/:id/attach-seller-solicitor", async (req, res) => {
   try {
-    const { solicitorId, createdAt } = req.body;
+    const { solicitorId, solicitorName, solicitorEmail, createdAt } = req.body;
     const contract = await getContract();
     const result = await contract.submitTransaction(
       "PropertyContract:attachSolicitorToSeller",
       req.params.id,
       solicitorId,
+      solicitorName,
+      solicitorEmail,
       createdAt || new Date().toISOString()
     );
     res.json({ success: true, data: JSON.parse(result.toString()) });
@@ -259,12 +312,14 @@ router.post("/property/:id/attach-seller-solicitor", async (req, res) => {
 
 router.post("/property/:id/attach-buyer-solicitor", async (req, res) => {
   try {
-    const { solicitorId, createdAt } = req.body;
+    const { solicitorId, solicitorName, solicitorEmail, createdAt } = req.body;
     const contract = await getContract();
     const result = await contract.submitTransaction(
       "PropertyContract:attachSolicitorToBuyer",
       req.params.id,
       solicitorId,
+      solicitorName,
+      solicitorEmail,
       createdAt || new Date().toISOString()
     );
     res.json({ success: true, data: JSON.parse(result.toString()) });
@@ -275,12 +330,14 @@ router.post("/property/:id/attach-buyer-solicitor", async (req, res) => {
 
 router.post("/property/:id/attach-buyer", async (req, res) => {
   try {
-    const { buyerId, updatedAt } = req.body;
+    const { buyerId, buyerName, buyerEmail, updatedAt } = req.body;
     const contract = await getContract();
     const result = await contract.submitTransaction(
       "PropertyContract:attachBuyerToProperty",
       req.params.id,
       buyerId,
+      buyerName,
+      buyerEmail,
       updatedAt || new Date().toISOString()
     );
     res.json({ success: true, data: JSON.parse(result.toString()) });
