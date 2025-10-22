@@ -31,13 +31,15 @@ router.use(authenticateApiKey);
 // ----------------------------
 router.post("/property", async (req, res) => {
   try {
-    const { id, title, description, sellerId, sellerName, sellerEmail, createdAt } = req.body;
+    const { id, title, description, sellerId, sellerName, sellerEmail,sellerkycId,buyerkycId, createdAt } = req.body;
     const contract = await getContract();
     const result = await contract.submitTransaction(
       "PropertyContract:createProperty",
       id,
       title,
       description || "",
+      sellerkycId || "",
+      buyerkycId || "",
       sellerId,
       sellerName,
       sellerEmail,
@@ -84,6 +86,8 @@ router.put("/property/:id", async (req, res) => {
       buyerSolicitorId, 
       buyerSolicitorName, 
       buyerSolicitorEmail, 
+      sellerkycId,
+      buyerkycId,
       updatedAt 
     } = req.body;
     const contract = await getContract();
@@ -103,6 +107,8 @@ router.put("/property/:id", async (req, res) => {
       buyerSolicitorId || "",
       buyerSolicitorName || "",
       buyerSolicitorEmail || "",
+      sellerkycId || "",
+      buyerkycId || "",
       updatedAt || new Date().toISOString()
     );
     res.json({ success: true, data: JSON.parse(result.toString()) });
@@ -387,5 +393,19 @@ router.get("/txn/:id", async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+
+router.get("/property/:id/progress", async (req, res) => {
+  try {
+    const contract = await getContract();
+    const result = await contract.evaluateTransaction(
+      "PropertyContract:_calculateProgress",
+      req.params.id
+    );
+    res.json(JSON.parse(result.toString()));
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 
 module.exports = router;

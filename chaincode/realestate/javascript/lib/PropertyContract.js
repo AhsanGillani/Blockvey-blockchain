@@ -13,7 +13,7 @@ class PropertyContract extends Contract {
     // ----------------------------
     // Create Property (caller supplies id)
     // ----------------------------
-    async createProperty(ctx, id, title, description,sellerId,sellerName,sellerEmail, createdAt) {
+    async createProperty(ctx, id, title, description,sellerkycId,buyerkycId,sellerId,sellerName,sellerEmail, createdAt) {
         const exists = await this.propertyExists(ctx, id);
         if (exists) {
             throw new Error(`Property ${id} already exists`);
@@ -26,10 +26,11 @@ class PropertyContract extends Contract {
             description,
             owner:sellerName,
             status: 'Created',
+            propertyprogressbar: 0,
             contractId: '',
-            kycId: { seller: null, buyer: null },
+            kycId: { seller: null, approved: false, buyer: null, approved: false },
             transactions: [],         // will hold TXN IDs
-            kyc: { seller: null, buyer: null },
+            kyc: { seller: null, approved: false, buyer: null, approved: false },
             participants: {
                 seller: { id: sellerId,sellerName: sellerName, sellerEmail: sellerEmail, sellerSolicitorId: null ,sellerSolicitorName: '', sellerSolicitorEmail: ''},
                 buyer: { id: '', buyerName: '', buyerEmail: '', buyerSolicitorId: null ,buyerSolicitorName: '', buyerSolicitorEmail: '' }
@@ -38,6 +39,65 @@ class PropertyContract extends Contract {
             updatedAt: now
         };
 
+        //check if kyc already exists and approved by seller and buyer you have to add one more record during create property you have to attach the kyc id to the property and approved by seller and buyer mark as true
+        const sellerkycKey = `KYC::${sellerkycId}`;
+        const sellerkycData = await ctx.stub.getState(sellerkycKey);
+        if (sellerkycData && sellerkycData.length > 0) {
+            try {
+                const sellerkyc = JSON.parse(sellerkycData.toString());
+                if (sellerkyc && sellerkyc.status === 'Approved') {
+                    property.kycId.seller = sellerkycId;
+                    property.kycId.approved = true;
+                    property.kyc.seller = sellerkycId;
+                    property.kyc.approved = true;
+                }
+                if (sellerkyc && sellerkyc.status === 'Pending') {
+                    property.kycId.seller = sellerkycId;
+                    property.kycId.approved = false;
+                    property.kyc.seller = sellerkycId;
+                    property.kyc.approved = false;
+                }
+                if (sellerkyc && sellerkyc.status === 'Rejected') {
+                    property.kycId.seller = sellerkycId;
+                    property.kycId.approved = false;
+                    property.kyc.seller = sellerkycId;
+                    property.kyc.approved = false;
+                }
+            } catch (e) {
+                // ignore malformed KYC payload
+            }
+        }
+        const buyerkycKey = `KYC::${buyerkycId}`;
+        const buyerkycData = await ctx.stub.getState(buyerkycKey);
+        if (buyerkycData && buyerkycData.length > 0) {
+            try {
+                const buyerkyc = JSON.parse(buyerkycData.toString());
+                if (buyerkyc && buyerkyc.status === 'Approved') {
+                    property.kycId.buyer = buyerkycId;
+                    property.kycId.approved = true;
+                    property.kyc.buyer = buyerkycId;
+                    property.kyc.approved = true;
+                }
+                if (buyerkyc && buyerkyc.status === 'Pending') {
+                    property.kycId.buyer = buyerkycId;
+                    property.kycId.approved = false;
+                    property.kyc.buyer = buyerkycId;
+                    property.kyc.approved = false;
+                }
+                if (buyerkyc && buyerkyc.status === 'Rejected') {
+                    property.kycId.buyer = buyerkycId;
+                    property.kycId.approved = false;
+                    property.kyc.buyer = buyerkycId;
+                    property.kyc.approved = false;
+                }
+            } catch (e) {
+                // ignore malformed KYC payload
+            }
+        }
+
+        // Set initial progress
+        property.propertyprogressbar = await this._calculateProgress(ctx, property);
+        
         await ctx.stub.putState(`PROPERTY::${id}`, Buffer.from(JSON.stringify(property)));
         return JSON.stringify(property);
     }
@@ -45,7 +105,7 @@ class PropertyContract extends Contract {
     // ----------------------------
     // Update Property (metadata and/or owner)  sellerName, sellerEmail, sellerSolicitorId, sellerSolicitorName, sellerSolicitorEmail, buyerName, buyerEmail, buyerSolicitorId, buyerSolicitorName, buyerSolicitorEmail
     // ----------------------------
-    async updateProperty(ctx, id, title, description, owner,sellerName, sellerEmail, sellerSolicitorId, sellerSolicitorName, sellerSolicitorEmail, buyerName, buyerEmail, buyerSolicitorId, buyerSolicitorName, buyerSolicitorEmail,updatedAt) {
+    async updateProperty(ctx, id, title, description, owner,sellerName, sellerEmail, sellerSolicitorId, sellerSolicitorName, sellerSolicitorEmail, buyerName, buyerEmail, buyerSolicitorId, buyerSolicitorName, buyerSolicitorEmail,sellerkycId,buyerkycId,updatedAt) {
         const property = await this._getProperty(ctx, id);
 
         if (title) property.title = title;
@@ -62,7 +122,70 @@ class PropertyContract extends Contract {
         if (buyerSolicitorName) property.participants.buyer.buyerSolicitorName = buyerSolicitorName;
         if (buyerSolicitorEmail) property.participants.buyer.buyerSolicitorEmail = buyerSolicitorEmail;
         property.status = 'Updated';
+
+        //check if kyc already exists and approved by seller and buyer you have to add one more record during update property you have to attach the kyc id to the property and approved by seller and buyer mark as true
+        const sellerkycKey = `KYC::${sellerkycId}`;
+        const sellerkycData = await ctx.stub.getState(sellerkycKey);
+        if (sellerkycData && sellerkycData.length > 0) {
+            try {
+                const sellerkyc = JSON.parse(sellerkycData.toString());
+                if (sellerkyc && sellerkyc.status === 'Approved') {
+                    property.kycId.seller = sellerkycId;
+                    property.kycId.approved = true;
+                    property.kyc.seller = sellerkycId;
+                    property.kyc.approved = true;
+                }
+                if (sellerkyc && sellerkyc.status === 'Pending') {
+                    property.kycId.seller = sellerkycId;
+                    property.kycId.approved = false;
+                    property.kyc.seller = sellerkycId;
+                    property.kyc.approved = false;
+                }
+                if (sellerkyc && sellerkyc.status === 'Rejected') {
+                    property.kycId.seller = sellerkycId;
+                    property.kycId.approved = false;
+                    property.kyc.seller = sellerkycId;
+                    property.kyc.approved = false;
+                }
+            } catch (e) {
+                // ignore malformed KYC payload
+            }
+        }
+        const buyerkycKey = `KYC::${buyerkycId}`;
+        const buyerkycData = await ctx.stub.getState(buyerkycKey);
+        if (buyerkycData && buyerkycData.length > 0) {
+            try {
+                const buyerkyc = JSON.parse(buyerkycData.toString());
+                if (buyerkyc && buyerkyc.status === 'Approved') {
+                    property.kycId.buyer = buyerkycId;
+                    property.kycId.approved = true;
+                    property.kyc.buyer = buyerkycId;
+                    property.kyc.approved = true;
+                }
+                if (buyerkyc && buyerkyc.status === 'Pending') {
+                    property.kycId.buyer = buyerkycId;
+                    property.kycId.approved = false;
+                    property.kyc.buyer = buyerkycId;
+                    property.kyc.approved = false;
+                }
+                if (buyerkyc && buyerkyc.status === 'Rejected') {
+                    property.kycId.buyer = buyerkycId;
+                    property.kycId.approved = false;
+                    property.kyc.buyer = buyerkycId;
+                    property.kyc.approved = false;
+                }
+            } catch (e) {
+                // ignore malformed KYC payload
+            }
+        }
+
+
+
+
         property.updatedAt = updatedAt || new Date().toISOString();
+        
+        // Update progress
+        property.propertyprogressbar = await this._calculateProgress(ctx, property);
 
         await ctx.stub.putState(`PROPERTY::${id}`, Buffer.from(JSON.stringify(property)));
         return JSON.stringify(property);
@@ -120,6 +243,10 @@ class PropertyContract extends Contract {
         property.participants.seller.sellerSolicitorEmail = solicitorEmail;
         property.status = 'SellerSolicitorAttached';
         property.updatedAt = createdAt;
+        
+        // Update progress
+        property.propertyprogressbar = await this._calculateProgress(ctx, property);
+        
         await ctx.stub.putState(`PROPERTY::${propertyId}`, Buffer.from(JSON.stringify(property)));
         return JSON.stringify(property);
     }
@@ -175,7 +302,12 @@ class PropertyContract extends Contract {
         property.participants.buyer.id = buyerId;
         property.participants.buyer.buyerName = buyerName;
         property.participants.buyer.buyerEmail = buyerEmail;
+        property.status = 'BuyerAttached';
         property.updatedAt = updatedAt;
+        
+        // Update progress
+        property.propertyprogressbar = await this._calculateProgress(ctx, property);
+        
         await ctx.stub.putState(`PROPERTY::${propertyId}`, Buffer.from(JSON.stringify(property)));
         return JSON.stringify(property);
     }
@@ -220,6 +352,10 @@ class PropertyContract extends Contract {
         property.contractId = contractId;
         property.status = 'UnderContract';
         property.updatedAt = createdAt;
+        
+        // Update progress
+        property.propertyprogressbar = await this._calculateProgress(ctx, property);
+        
         await ctx.stub.putState(`PROPERTY::${propertyId}`, Buffer.from(JSON.stringify(property)));
 
         return JSON.stringify(contract);
@@ -245,6 +381,19 @@ class PropertyContract extends Contract {
             // For safety you might accept param 'role' instead of signerId
             throw new Error(`Signer ${signerEmail} not recognized as participant for contract ${contractId}`);
         }
+        const propertyId = contract.propertyId;
+        const property = await this._getProperty(ctx, propertyId);
+        //property.status = slller signed or buyer signed or solicitor signed or seller solicitor signed;
+        if (contract.signatures.seller) property.status = 'SellerSigned';
+        if (contract.signatures.buyer) property.status = 'BuyerSigned';
+        if (contract.signatures.buyerSolicitor) property.status = 'BuyerSolicitorSigned';
+        if (contract.signatures.sellerSolicitor) property.status = 'SellerSolicitorSigned';
+        property.updatedAt = signedAt;
+        
+        // Update progress
+        property.propertyprogressbar = await this._calculateProgress(ctx, property);
+        
+        await ctx.stub.putState(`PROPERTY::${propertyId}`, Buffer.from(JSON.stringify(property)));
 
         // check if all signatures done
         const allSigned = Object.values(contract.signatures).every(v => v === true);
@@ -293,6 +442,10 @@ class PropertyContract extends Contract {
         // Optionally link to property by searching (caller can pass propertyId elsewhere). For convenience we do NOT link here.
         property.transactions.push(txnId);
         property.updatedAt = createdAt;
+        
+        // Update progress
+        property.propertyprogressbar = await this._calculateProgress(ctx, property);
+        
         await ctx.stub.putState(`PROPERTY::${propertyId}`, Buffer.from(JSON.stringify(property)));  
         // emit event
         await ctx.stub.setEvent('TransactionRecorded', Buffer.from(JSON.stringify({ txnId })));
@@ -330,6 +483,16 @@ class PropertyContract extends Contract {
         }
 
         await ctx.stub.putState(key, Buffer.from(JSON.stringify(txn)));
+        
+        // Update progress on the property
+        try {
+            const property = await this._getProperty(ctx, txn.propertyId);
+            property.propertyprogressbar = await this._calculateProgress(ctx, property);
+            await ctx.stub.putState(`PROPERTY::${txn.propertyId}`, Buffer.from(JSON.stringify(property)));
+        } catch (e) {
+            // Ignore property update errors
+        }
+        
         return JSON.stringify(txn);
     }
 
@@ -359,6 +522,7 @@ class PropertyContract extends Contract {
         property.owner = contract.buyerName;
         property.status = 'Completed';
         property.updatedAt = updatedAt;
+        property.propertyprogressbar = 100; // Final completion
 
         await ctx.stub.putState(`PROPERTY::${propertyId}`, Buffer.from(JSON.stringify(property)));
 
@@ -452,6 +616,82 @@ class PropertyContract extends Contract {
         const data = await ctx.stub.getState(`PROPERTY::${id}`);
         if (!data || data.length === 0) throw new Error(`Property ${id} does not exist`);
         return JSON.parse(data.toString());
+    }
+
+    // Helper function to calculate progress based on property state and contract signatures
+    async _calculateProgress(ctx, property) {
+        let progress = 0;
+        
+        // Property created: 10%
+        if (property.status === 'Created') {
+            progress = 10;
+        }
+        // Seller solicitor attached: 20%
+        else if (property.status === 'SellerSolicitorAttached') {
+            progress = 20;
+        }
+        // Buyer attached: 30%
+        else if (property.status === 'BuyerAttached') {
+            progress = 30;
+        }
+        // Contract generated: 40%
+        else if (property.status === 'UnderContract') {
+            progress = 40;
+        }
+        // Contract signatures: 45%, 50%, 55%, 60%
+        else if (property.status === 'SellerSigned' || property.status === 'BuyerSigned' || 
+                 property.status === 'BuyerSolicitorSigned' || property.status === 'SellerSolicitorSigned') {
+            progress = 40; // Base contract progress
+            
+            // Check contract signatures if contract exists
+            if (property.contractId) {
+                try {
+                    const contractData = await ctx.stub.getState(`CONTRACT::${property.contractId}`);
+                    if (contractData && contractData.length > 0) {
+                        const contract = JSON.parse(contractData.toString());
+                        if (contract.signatures) {
+                            if (contract.signatures.seller) progress += 5; // 45%
+                            if (contract.signatures.buyer) progress += 5; // 50%
+                            if (contract.signatures.sellerSolicitor) progress += 5; // 55%
+                            if (contract.signatures.buyerSolicitor) progress += 5; // 60%
+                        }
+                    }
+                } catch (e) {
+                    // Ignore contract parsing errors
+                }
+            }
+        }
+        // Transaction stages: 65%, 70%, 80%
+        else if (property.transactions && property.transactions.length > 0) {
+            progress = 60; // Base after all signatures
+            
+            // Check transaction statuses
+            let completedTxns = 0;
+            for (const txnId of property.transactions) {
+                try {
+                    const txnData = await ctx.stub.getState(`TXN::${txnId}`);
+                    if (txnData && txnData.length > 0) {
+                        const txn = JSON.parse(txnData.toString());
+                        if (txn.status === 'Completed') {
+                            completedTxns++;
+                        }
+                    }
+                } catch (e) {
+                    // Ignore transaction parsing errors
+                }
+            }
+            
+            // Progress based on completed transactions
+            if (completedTxns >= 1) progress = 65; // Buyer to buyer solicitor
+            if (completedTxns >= 2) progress = 70; // Buyer solicitor to seller solicitor  
+            if (completedTxns >= 3) progress = 80; // Seller solicitor to buyer
+        }
+        // Final transfer: 100%
+        else if (property.status === 'Completed') {
+            progress = 100;
+        }
+        
+        return progress;
     }
 }
 
