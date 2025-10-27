@@ -290,10 +290,14 @@ class PropertyContract extends Contract {
         const propertyData = await ctx.stub.getState(propertyKey);
         if (propertyData && propertyData.length > 0) {
             const property = JSON.parse(propertyData.toString());
-            property.kyc[kyc.type] = kycId;
-            property.kycId[kyc.type] = kycId;
-            property.kyc[kyc.type].approved = true;
-            property.kycId[kyc.type].approved = true;
+            if (kyc.type === 'seller') {
+                property.kycId.sellerapproved = true;
+                property.kyc.sellerapproved = true;
+            }
+            if (kyc.type === 'buyer') {
+                property.kycId.buyerapproved = true;
+                property.kyc.buyerapproved = true;
+            }
             property.status = 'KYCApproved';
             property.updatedAt = approvedAt;
             await ctx.stub.putState(propertyKey, Buffer.from(JSON.stringify(property)));
