@@ -724,10 +724,13 @@ class PropertyContract extends Contract {
                 }
             }
         }
-        // Transaction stages: 65%, 70%, 80%
-        else if (property.transactions && property.transactions.length > 0) {
-            progress = 60; // Base after all signatures
-            
+        // Final transfer: 100%
+        else if (property.status === 'Completed') {
+            progress = 100;
+        }
+        
+        // Check for transaction stages: 65%, 70%, 80% (check regardless of status)
+        if (property.transactions && property.transactions.length > 0) {
             // Check transaction statuses
             let completedTxns = 0;
             for (const txnId of property.transactions) {
@@ -744,14 +747,10 @@ class PropertyContract extends Contract {
                 }
             }
             
-            // Progress based on completed transactions
+            // Progress based on completed transactions (override previous progress if transactions exist)
             if (completedTxns >= 1) progress = 65; // Buyer to buyer solicitor
             if (completedTxns >= 2) progress = 70; // Buyer solicitor to seller solicitor  
             if (completedTxns >= 3) progress = 80; // Seller solicitor to buyer
-        }
-        // Final transfer: 100%
-        else if (property.status === 'Completed') {
-            progress = 100;
         }
         
         return progress;
