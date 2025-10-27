@@ -285,42 +285,59 @@ class PropertyContract extends Contract {
 
         await ctx.stub.putState(kycKey, Buffer.from(JSON.stringify(kyc)));
 
-        // Optionally update property KYC pointer(s)
-        const propertyKey = `PROPERTY::${kyc.propertyId}`;
-        const propertyData = await ctx.stub.getState(propertyKey);
-        if (propertyData && propertyData.length > 0) {
-            const property = JSON.parse(propertyData.toString());
-            if (kyc.type === 'seller') {
-                property.kycId.sellerapproved = true;
-                property.kyc.sellerapproved = true;
+        // Find all properties where this KYC ID is attached as seller or buyer
+        const iterator = await ctx.stub.getStateByRange('PROPERTY::', 'PROPERTY::z');
+        const propertiesToUpdate = [];
+
+        while (true) {
+            const res = await iterator.next();
+            if (!res.value || res.done) break;
+            
+            try {
+                const property = JSON.parse(res.value.value.toString('utf8'));
+                
+                // Check if this KYC ID is attached to this property
+                const isSellerKYC = property.kycId && property.kycId.seller === kycId;
+                const isBuyerKYC = property.kycId && property.kycId.buyer === kycId;
+                
+                if (isSellerKYC || isBuyerKYC) {
+                    // Update the property based on KYC type
+                    if (kyc.type === 'seller' && isSellerKYC) {
+                        property.kycId.sellerapproved = (decision === 'approve');
+                        property.kyc.sellerapproved = (decision === 'approve');
+                    }
+                    if (kyc.type === 'buyer' && isBuyerKYC) {
+                        property.kycId.buyerapproved = (decision === 'approve');
+                        property.kyc.buyerapproved = (decision === 'approve');
+                    }
+                    
+                    property.updatedAt = approvedAt;
+                    
+                    // Update status if approved
+                    if (decision === 'approve') {
+                        // Check if both seller and buyer KYC are approved
+                        const bothApproved = property.kycId.sellerapproved && property.kycId.buyerapproved;
+                        if (bothApproved) {
+                            property.status = 'KYCApproved';
+                        }
+                    }
+                    
+                    propertiesToUpdate.push({
+                        key: res.value.key,
+                        property: property
+                    });
+                }
+            } catch (e) {
+                // Ignore malformed properties
             }
-            if (kyc.type === 'buyer') {
-                property.kycId.buyerapproved = true;
-                property.kyc.buyerapproved = true;
-            }
-            property.status = 'KYCApproved';
-            property.updatedAt = approvedAt;
-            await ctx.stub.putState(propertyKey, Buffer.from(JSON.stringify(property)));
         }
-        // find properties where partyId matches and update property.kyc.<type>
-        const properties = await this._getProperties(ctx, kyc.partyId);
-        for (const property of properties) {
-            if (property.participants.seller.id === kyc.partyId && kyc.type === 'seller') {
-                property.kycId.sellerapproved = true;
-                property.kyc.sellerapproved = true;
-                property.status = 'KYCApproved';
-                property.updatedAt = approvedAt;
-                await ctx.stub.putState(propertyKey, Buffer.from(JSON.stringify(property)));
-            }
-            if (property.participants.buyer.id === kyc.partyId && kyc.type === 'buyer') {
-                property.kycId.buyerapproved = true;
-                property.kyc.buyerapproved = true;
-                property.status = 'KYCApproved';
-                property.updatedAt = approvedAt;
-                await ctx.stub.putState(propertyKey, Buffer.from(JSON.stringify(property)));
-            }
+        await iterator.close();
+
+        // Update all affected properties
+        for (const item of propertiesToUpdate) {
+            await ctx.stub.putState(item.key, Buffer.from(JSON.stringify(item.property)));
         }
-        return JSON.stringify(kyc);
+   
     }
 
     // ----------------------------
@@ -629,29 +646,6 @@ class PropertyContract extends Contract {
         return await this.getTransactionDetails(ctx, txnId);
     }
 
-
-
-    // ----------------------------
-    // Get Properties by partyId
-    // ----------------------------
-    async _getProperties(ctx, partyId) {
-        const iterator = await ctx.stub.getStateByRange(`PROPERTY::`, `${partyId}`);
-        const properties = [];
-        while (true) {
-            const res = await iterator.next();
-            if (res.value && res.value.value.toString()) {
-                const property = JSON.parse(res.value.value.toString());
-                if (property.participants.seller.id === partyId || property.participants.buyer.id === partyId) {
-                    properties.push(property);
-                }
-            }
-            if (res.done) {
-                await iterator.close();
-                break;
-            }
-        }
-        return properties;
-    }
 
 
     // ----------------------------
