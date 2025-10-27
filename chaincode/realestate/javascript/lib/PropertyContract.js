@@ -748,9 +748,14 @@ class PropertyContract extends Contract {
             }
             
             // Progress based on completed transactions (override previous progress if transactions exist)
-            if (completedTxns == 1) progress = 65; // Buyer to buyer solicitor
-            if (completedTxns == 2) progress = 70; // Buyer solicitor to seller solicitor  
-            if (completedTxns == 3) progress = 80; // Seller solicitor to buyer
+            // Use if-else to ensure only one value is set
+            if (completedTxns >= 3) {
+                progress = 80; // Seller solicitor to buyer
+            } else if (completedTxns >= 2) {
+                progress = 70; // Buyer solicitor to seller solicitor
+            } else if (completedTxns >= 1) {
+                progress = 65; // Buyer to buyer solicitor
+            }
         }
         
         return progress;
