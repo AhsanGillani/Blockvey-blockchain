@@ -286,6 +286,18 @@ class PropertyContract extends Contract {
         await ctx.stub.putState(kycKey, Buffer.from(JSON.stringify(kyc)));
 
         // Optionally update property KYC pointer(s)
+        const propertyKey = `PROPERTY::${kyc.propertyId}`;
+        const propertyData = await ctx.stub.getState(propertyKey);
+        if (propertyData && propertyData.length > 0) {
+            const property = JSON.parse(propertyData.toString());
+            property.kyc[kyc.type] = kycId;
+            property.kycId[kyc.type] = kycId;
+            property.kyc[kyc.type].approved = true;
+            property.kycId[kyc.type].approved = true;
+            property.status = 'KYCApproved';
+            property.updatedAt = approvedAt;
+            await ctx.stub.putState(propertyKey, Buffer.from(JSON.stringify(property)));
+        }
         // find properties where partyId matches and update property.kyc.<type>
         // For simplicity caller can manage property linking; you may extend to search.
 
