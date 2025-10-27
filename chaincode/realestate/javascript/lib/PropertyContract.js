@@ -303,8 +303,23 @@ class PropertyContract extends Contract {
             await ctx.stub.putState(propertyKey, Buffer.from(JSON.stringify(property)));
         }
         // find properties where partyId matches and update property.kyc.<type>
-        // For simplicity caller can manage property linking; you may extend to search.
-
+        const properties = await this._getProperties(ctx, kyc.partyId);
+        for (const property of properties) {
+            if (property.participants.seller.id === kyc.partyId && kyc.type === 'seller') {
+                property.kycId.sellerapproved = true;
+                property.kyc.sellerapproved = true;
+                property.status = 'KYCApproved';
+                property.updatedAt = approvedAt;
+                await ctx.stub.putState(propertyKey, Buffer.from(JSON.stringify(property)));
+            }
+            if (property.participants.buyer.id === kyc.partyId && kyc.type === 'buyer') {
+                property.kycId.buyerapproved = true;
+                property.kyc.buyerapproved = true;
+                property.status = 'KYCApproved';
+                property.updatedAt = approvedAt;
+                await ctx.stub.putState(propertyKey, Buffer.from(JSON.stringify(property)));
+            }
+        }
         return JSON.stringify(kyc);
     }
 
