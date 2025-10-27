@@ -629,6 +629,31 @@ class PropertyContract extends Contract {
         return await this.getTransactionDetails(ctx, txnId);
     }
 
+
+
+    // ----------------------------
+    // Get Properties by partyId
+    // ----------------------------
+    async _getProperties(ctx, partyId) {
+        const iterator = await ctx.stub.getStateByRange(`PROPERTY::`, `${partyId}`);
+        const properties = [];
+        while (true) {
+            const res = await iterator.next();
+            if (res.value && res.value.value.toString()) {
+                const property = JSON.parse(res.value.value.toString());
+                if (property.participants.seller.id === partyId || property.participants.buyer.id === partyId) {
+                    properties.push(property);
+                }
+            }
+            if (res.done) {
+                await iterator.close();
+                break;
+            }
+        }
+        return properties;
+    }
+
+
     // ----------------------------
     // Utility / internal functions
     // ----------------------------
