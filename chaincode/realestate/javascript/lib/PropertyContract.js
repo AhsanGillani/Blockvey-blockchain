@@ -546,13 +546,9 @@ class PropertyContract extends Contract {
         await ctx.stub.putState(key, Buffer.from(JSON.stringify(txn)));
         
         // Update progress on the property
-        try {
-            const property = await this._getProperty(ctx, txn.propertyId);
-            property.propertyprogressbar = await this._calculateProgress(ctx, property);
-            await ctx.stub.putState(`PROPERTY::${txn.propertyId}`, Buffer.from(JSON.stringify(property)));
-        } catch (e) {
-            // Ignore property update errors
-        }
+        const property = await this._getProperty(ctx, txn.propertyId);
+        property.propertyprogressbar = await this._calculateProgress(ctx, property);
+        await ctx.stub.putState(`PROPERTY::${txn.propertyId}`, Buffer.from(JSON.stringify(property)));
         
         return JSON.stringify(txn);
     }
@@ -730,7 +726,7 @@ class PropertyContract extends Contract {
         }
         
         // Check for transaction stages: 65%, 70%, 80% (check regardless of status)
-        if (property.transactions && property.transactions.length > 0) {
+        if (property.transactions && Array.isArray(property.transactions) && property.transactions.length > 0) {
             // Check transaction statuses
             let completedTxns = 0;
             for (const txnId of property.transactions) {
@@ -738,7 +734,8 @@ class PropertyContract extends Contract {
                     const txnData = await ctx.stub.getState(`TXN::${txnId}`);
                     if (txnData && txnData.length > 0) {
                         const txn = JSON.parse(txnData.toString());
-                        if (txn.status === 'Completed') {
+                        // Check if transaction is completed (case-insensitive check)
+                        if (txn.status && txn.status.trim().toLowerCase() === 'completed') {
                             completedTxns++;
                         }
                     }
