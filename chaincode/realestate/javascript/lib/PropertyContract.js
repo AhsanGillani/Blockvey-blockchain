@@ -337,7 +337,14 @@ class PropertyContract extends Contract {
         for (const item of propertiesToUpdate) {
             await ctx.stub.putState(item.key, Buffer.from(JSON.stringify(item.property)));
         }
-   
+
+        // Return the updated KYC and list of affected properties
+        return JSON.stringify({
+            kycId: kyc.id,
+            status: kyc.status,
+            affectedProperties: propertiesToUpdate.length,
+            properties: propertiesToUpdate.map(item => item.property.id)
+        });
     }
 
     // ----------------------------
