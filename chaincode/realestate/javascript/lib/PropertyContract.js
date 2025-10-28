@@ -341,7 +341,13 @@ class PropertyContract extends Contract {
         // Return the updated KYC and list of affected properties
         return JSON.stringify({
             kycId: kyc.id,
+            partyId: kyc.partyId,
+            type: kyc.type,
+            data: kyc.data,
             status: kyc.status,
+            approvedby: kyc.approvedBy,
+            approvalcomment: kyc.approvalComment,
+            approvedat: kyc.approvedAt,
             affectedProperties: propertiesToUpdate.length,
             properties: propertiesToUpdate.map(item => item.property.id)
         });
@@ -446,8 +452,8 @@ class PropertyContract extends Contract {
         property.updatedAt = signedAt;
         
         // Update progress
-        
         property.propertyprogressbar = await this._calculateProgress(ctx, property);
+        
         await ctx.stub.putState(`PROPERTY::${propertyId}`, Buffer.from(JSON.stringify(property)));
 
         // check if all signatures done
@@ -540,9 +546,13 @@ class PropertyContract extends Contract {
         await ctx.stub.putState(key, Buffer.from(JSON.stringify(txn)));
         
         // Update progress on the property
-        const property = await this._getProperty(ctx, txn.propertyId);
-        property.propertyprogressbar = await this._calculateProgress(ctx, property);
-        await ctx.stub.putState(`PROPERTY::${txn.propertyId}`, Buffer.from(JSON.stringify(property)));
+        try {
+            const property = await this._getProperty(ctx, txn.propertyId);
+            property.propertyprogressbar = await this._calculateProgress(ctx, property);
+            await ctx.stub.putState(`PROPERTY::${txn.propertyId}`, Buffer.from(JSON.stringify(property)));
+        } catch (e) {
+            // Ignore property update errors
+        }
         
         return JSON.stringify(txn);
     }
@@ -681,15 +691,15 @@ class PropertyContract extends Contract {
         }
         // Seller solicitor attached: 20%
         else if (property.status === 'SellerSolicitorAttached') {
-            progress = property.propertyprogressbar + 10;
+            progress = 20;
         }
         // Buyer attached: 30%
         else if (property.status === 'BuyerAttached') {
-            progress = property.propertyprogressbar + 10;
+            progress = 30;
         }
         // Contract generated: 40%
         else if (property.status === 'UnderContract') {
-            progress = property.propertyprogressbar + 10;
+            progress = 40;
         }
         // Contract signatures: 45%, 50%, 55%, 60%
         else if (property.status === 'SellerSigned' || property.status === 'BuyerSigned' || 
@@ -714,13 +724,10 @@ class PropertyContract extends Contract {
                 }
             }
         }
-        // Final transfer: 100%
-        else if (property.status === 'Completed') {
-            progress = 100;
-        }
-        
-        // Check for transaction stages: 65%, 70%, 80% (check regardless of status)
-        if (property.transactions && Array.isArray(property.transactions) && property.transactions.length > 0) {
+        // Transaction stages: 65%, 70%, 80%
+        else if (property.transactions && property.transactions.length > 0) {
+            progress = 60; // Base after all signatures
+            
             // Check transaction statuses
             let completedTxns = 0;
             for (const txnId of property.transactions) {
@@ -728,8 +735,7 @@ class PropertyContract extends Contract {
                     const txnData = await ctx.stub.getState(`TXN::${txnId}`);
                     if (txnData && txnData.length > 0) {
                         const txn = JSON.parse(txnData.toString());
-                        // Check if transaction is completed (case-insensitive check)
-                        if (txn.status && txn.status.trim().toLowerCase() === 'completed') {
+                        if (txn.status === 'Completed') {
                             completedTxns++;
                         }
                     }
@@ -738,15 +744,14 @@ class PropertyContract extends Contract {
                 }
             }
             
-            // Progress based on completed transactions (override previous progress if transactions exist)
-            // Use if-else to ensure only one value is set
-            if (completedTxns >= 3) {
-                progress = 80; // Seller solicitor to buyer
-            } else if (completedTxns >= 2) {
-                progress = 70; // Buyer solicitor to seller solicitor
-            } else if (completedTxns >= 1) {
-                progress = 65; // Buyer to buyer solicitor
-            }
+            // Progress based on completed transactions
+            if (completedTxns >= 1) progress = 65; // Buyer to buyer solicitor
+            if (completedTxns >= 2) progress = 70; // Buyer solicitor to seller solicitor  
+            if (completedTxns >= 3) progress = 80; // Seller solicitor to buyer
+        }
+        // Final transfer: 100%
+        else if (property.status === 'Completed') {
+            progress = 100;
         }
         
         return progress;
