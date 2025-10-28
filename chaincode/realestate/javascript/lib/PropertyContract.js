@@ -431,30 +431,38 @@ class PropertyContract extends Contract {
         const data = await ctx.stub.getState(contractKey);
         if (!data || data.length === 0) throw new Error(`Contract ${contractId} not found`);
         const contract = JSON.parse(data.toString());
-        const property = await this._getProperty(ctx, contract.propertyId);
+        
         // Map signer to signature role. In production you must check ctx.clientIdentity
         if (signerEmail === contract.buyerEmail){
          contract.signatures.buyer = true;
+         const property = await this._getProperty(ctx, contract.propertyId);
          property.status = 'BuyerSigned';
          property.propertyprogressbar+=5;
+         await ctx.stub.putState(`PROPERTY::${property.id}`, Buffer.from(JSON.stringify(property)));
         }
         else if (signerEmail === contract.sellerEmail){
             contract.signatures.seller = true;
+            const property = await this._getProperty(ctx, contract.propertyId);
             property.status = 'SellerSigned';
             property.propertyprogressbar+=5;
+            await ctx.stub.putState(`PROPERTY::${property.id}`, Buffer.from(JSON.stringify(property)));
         }
         else if (signerEmail === contract.buyerSolicitorEmail){
             contract.signatures.buyerSolicitor = true;
+            const property = await this._getProperty(ctx, contract.propertyId);
             property.status = 'BuyerSolicitorSigned';
             property.propertyprogressbar+=5;
+            await ctx.stub.putState(`PROPERTY::${property.id}`, Buffer.from(JSON.stringify(property)));
         }
         else if (signerEmail === contract.sellerSolicitorEmail){
             contract.signatures.sellerSolicitor = true;
+            const property = await this._getProperty(ctx, contract.propertyId);
             property.status = 'SellerSolicitorSigned';
             property.propertyprogressbar+=5;
+            await ctx.stub.putState(`PROPERTY::${property.id}`, Buffer.from(JSON.stringify(property)));
         }
         else {
-        
+            
             throw new Error(`Signer ${signerEmail} not recognized as participant for contract ${contractId}`);
         }
         
