@@ -341,13 +341,7 @@ class PropertyContract extends Contract {
         // Return the updated KYC and list of affected properties
         return JSON.stringify({
             kycId: kyc.id,
-            partyId: kyc.partyId,
-            type: kyc.type,
-            data: kyc.data,
             status: kyc.status,
-            approvedby: kyc.approvedBy,
-            approvalcomment: kyc.approvalComment,
-            approvedat: kyc.approvedAt,
             affectedProperties: propertiesToUpdate.length,
             properties: propertiesToUpdate.map(item => item.property.id)
         });
