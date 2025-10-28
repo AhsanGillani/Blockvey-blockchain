@@ -431,29 +431,38 @@ class PropertyContract extends Contract {
         const data = await ctx.stub.getState(contractKey);
         if (!data || data.length === 0) throw new Error(`Contract ${contractId} not found`);
         const contract = JSON.parse(data.toString());
-
+        const property = await this._getProperty(ctx, contract.propertyId);
         // Map signer to signature role. In production you must check ctx.clientIdentity
-        if (signerEmail === contract.buyerEmail) contract.signatures.buyer = true;
-        else if (signerEmail === contract.sellerEmail) contract.signatures.seller = true;
-        else if (signerEmail === contract.buyerSolicitorEmail) contract.signatures.buyerSolicitor = true;
-        else if (signerEmail === contract.sellerSolicitorEmail) contract.signatures.sellerSolicitor = true;
+        if (signerEmail === contract.buyerEmail){
+         contract.signatures.buyer = true;
+         property.status = 'BuyerSigned';
+         property.propertyprogressbar+=5;
+        }
+        else if (signerEmail === contract.sellerEmail){
+            contract.signatures.seller = true;
+            property.status = 'SellerSigned';
+            property.propertyprogressbar+=5;
+        }
+        else if (signerEmail === contract.buyerSolicitorEmail){
+            contract.signatures.buyerSolicitor = true;
+            property.status = 'BuyerSolicitorSigned';
+            property.propertyprogressbar+=5;
+        }
+        else if (signerEmail === contract.sellerSolicitorEmail){
+            contract.signatures.sellerSolicitor = true;
+            property.status = 'SellerSolicitorSigned';
+            property.propertyprogressbar+=5;
+        }
         else {
-            // Accept generic signer mapping if they pass exact role key
-            // For safety you might accept param 'role' instead of signerId
+        
             throw new Error(`Signer ${signerEmail} not recognized as participant for contract ${contractId}`);
         }
-        const propertyId = contract.propertyId;
-        const property = await this._getProperty(ctx, propertyId);
-        //property.status = slller signed or buyer signed or solicitor signed or seller solicitor signed;
-        if (contract.signatures.seller) property.status = 'SellerSigned';
-        if (contract.signatures.buyer) property.status = 'BuyerSigned';
-        if (contract.signatures.buyerSolicitor) property.status = 'BuyerSolicitorSigned';
-        if (contract.signatures.sellerSolicitor) property.status = 'SellerSolicitorSigned';
+        
         property.updatedAt = signedAt;
         
         // Update progress
         
-        property.propertyprogressbar = await this._calculateProgress(ctx, property);
+        
         await ctx.stub.putState(`PROPERTY::${propertyId}`, Buffer.from(JSON.stringify(property)));
 
         // check if all signatures done
