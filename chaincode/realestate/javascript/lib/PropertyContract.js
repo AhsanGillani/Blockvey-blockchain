@@ -687,15 +687,15 @@ class PropertyContract extends Contract {
         }
         // Seller solicitor attached: 20%
         else if (property.status === 'SellerSolicitorAttached') {
-            progress = 20;
+            progress = property.propertyprogressbar + 10;
         }
         // Buyer attached: 30%
         else if (property.status === 'BuyerAttached') {
-            progress = 30;
+            progress = property.propertyprogressbar + 10;
         }
         // Contract generated: 40%
         else if (property.status === 'UnderContract') {
-            progress = 40;
+            progress = property.propertyprogressbar + 10;
         }
         // Contract signatures: 45%, 50%, 55%, 60%
         else if (property.status === 'SellerSigned' || property.status === 'BuyerSigned' || 
@@ -746,11 +746,11 @@ class PropertyContract extends Contract {
             
             // Progress based on completed transactions (override previous progress if transactions exist)
             // Use if-else to ensure only one value is set
-            if (completedTxns >= 3) {
+            if (completedTxns >= 2) {
                 progress = 80; // Seller solicitor to buyer
-            } else if (completedTxns >= 2) {
-                progress = 70; // Buyer solicitor to seller solicitor
             } else if (completedTxns >= 1) {
+                progress = 70; // Buyer solicitor to seller solicitor
+            } else if (completedTxns >= 0) {
                 progress = 65; // Buyer to buyer solicitor
             }
         }
