@@ -96,7 +96,7 @@ class PropertyContract extends Contract {
         }
 
         // Set initial progress
-        property.propertyprogressbar = await this._calculateProgress(ctx, property);
+        property.propertyprogressbar = await this._calculateProgress(ctx, property.id);
         
         await ctx.stub.putState(`PROPERTY::${id}`, Buffer.from(JSON.stringify(property)));
         return JSON.stringify(property);
@@ -185,7 +185,7 @@ class PropertyContract extends Contract {
         property.updatedAt = updatedAt || new Date().toISOString();
         
         // Update progress
-        property.propertyprogressbar = await this._calculateProgress(ctx, property);
+        property.propertyprogressbar = await this._calculateProgress(ctx, property.id);
 
         await ctx.stub.putState(`PROPERTY::${id}`, Buffer.from(JSON.stringify(property)));
         return JSON.stringify(property);
@@ -245,7 +245,7 @@ class PropertyContract extends Contract {
         property.updatedAt = createdAt;
         
         // Update progress
-        property.propertyprogressbar = await this._calculateProgress(ctx, property);
+        property.propertyprogressbar = await this._calculateProgress(ctx, property.id);
         
         await ctx.stub.putState(`PROPERTY::${propertyId}`, Buffer.from(JSON.stringify(property)));
         return JSON.stringify(property);
@@ -263,6 +263,10 @@ class PropertyContract extends Contract {
         property.participants.buyer.buyerSolicitorEmail = solicitorEmail;
         property.status = 'BuyerSolicitorAttached';
         property.updatedAt = createdAt;
+        
+        // Update progress
+        property.propertyprogressbar = await this._calculateProgress(ctx, property.id);
+        
         await ctx.stub.putState(`PROPERTY::${propertyId}`, Buffer.from(JSON.stringify(property)));
         return JSON.stringify(property);
     }
@@ -367,7 +371,7 @@ class PropertyContract extends Contract {
         property.updatedAt = updatedAt;
         
         // Update progress
-        property.propertyprogressbar = await this._calculateProgress(ctx, property);
+        property.propertyprogressbar = await this._calculateProgress(ctx, property.id);
         
         await ctx.stub.putState(`PROPERTY::${propertyId}`, Buffer.from(JSON.stringify(property)));
         return JSON.stringify(property);
@@ -415,7 +419,7 @@ class PropertyContract extends Contract {
         property.updatedAt = createdAt;
         
         // Update progress
-        property.propertyprogressbar = await this._calculateProgress(ctx, property);
+        property.propertyprogressbar = await this._calculateProgress(ctx, property.id);
         
         await ctx.stub.putState(`PROPERTY::${propertyId}`, Buffer.from(JSON.stringify(property)));
 
@@ -452,7 +456,7 @@ class PropertyContract extends Contract {
         property.updatedAt = signedAt;
         
         // Update progress
-        property.propertyprogressbar = await this._calculateProgress(ctx, property);
+        property.propertyprogressbar = await this._calculateProgress(ctx, propertyId);
         
         await ctx.stub.putState(`PROPERTY::${propertyId}`, Buffer.from(JSON.stringify(property)));
 
@@ -505,7 +509,7 @@ class PropertyContract extends Contract {
         property.updatedAt = createdAt;
         
         // Update progress
-        property.propertyprogressbar = await this._calculateProgress(ctx, property);
+        property.propertyprogressbar = await this._calculateProgress(ctx, property.id);
         
         await ctx.stub.putState(`PROPERTY::${propertyId}`, Buffer.from(JSON.stringify(property)));  
         // emit event
@@ -547,7 +551,7 @@ class PropertyContract extends Contract {
         
         // Update progress on the property
         const property = await this._getProperty(ctx, txn.propertyId);
-        property.propertyprogressbar = await this._calculateProgress(ctx, property);
+        property.propertyprogressbar = await this._calculateProgress(ctx, property.id);
         await ctx.stub.putState(`PROPERTY::${txn.propertyId}`, Buffer.from(JSON.stringify(property)));
         
         return JSON.stringify(txn);
@@ -678,9 +682,9 @@ class PropertyContract extends Contract {
     }
 
     // Helper function to calculate progress based on property state and contract signatures
-    async _calculateProgress(ctx, property) {
+    async _calculateProgress(ctx, propertyid) {
         let progress = 0;
-        
+        const property = await this._getProperty(ctx, propertyid);
         // Property created: 10%
         if (property.status === 'Created') {
             progress = 10;
