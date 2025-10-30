@@ -227,7 +227,11 @@ class PropertyContract extends Contract {
             const res = await iterator.next();
             if (!res.value || res.done) break;
             try {
-                const property = JSON.parse(res.value.value.toString('utf8'));
+                const rawValue = res.value.value;
+                if (!rawValue || rawValue.length === 0) {
+                    continue;
+                }
+                const property = JSON.parse(rawValue.toString('utf8'));
 
                 let matched = false;
                 if (type === 'seller' && property.participants && property.participants.seller && property.participants.seller.id === partyId) {
@@ -247,7 +251,7 @@ class PropertyContract extends Contract {
                     property.kyc.buyerapproved = false;
                     property.kycId.buyer = kycId;
                     property.kycId.buyerapproved = false;
-                    property.status = 'KYCSubmitted';
+                    property.status = 'BuyerKYCSubmitted';
                     matched = true;
                 }
                 if (matched) {
