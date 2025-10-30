@@ -223,51 +223,54 @@ class PropertyContract extends Contract {
         const iterator = await ctx.stub.getStateByRange('PROPERTY::', 'PROPERTY::z');
         const affectedProperties = [];
 
-        while (true) {
-            const res = await iterator.next();
-            if (!res.value || res.done) break;
-            try {
-                const rawValue = res.value.value;
-                if (!rawValue || rawValue.length === 0) {
-                    continue;
-                }
-                const property = JSON.parse(rawValue.toString('utf8'));
+        try {
+            while (true) {
+                const res = await iterator.next();
+                if (res.done) break;
+                if (!res.value || !res.value.value) continue;
+                try {
+                    const rawValue = res.value.value;
+                    if (!rawValue || (rawValue.length !== undefined && rawValue.length === 0)) {
+                        continue;
+                    }
+                    const property = JSON.parse(rawValue.toString('utf8'));
 
-                let matched = false;
-                if (type === 'seller' && property.participants && property.participants.seller && property.participants.seller.id === partyId) {
-                    property.kyc = property.kyc || {};
-                    property.kycId = property.kycId || {};
-                    property.kyc.seller = kycId;
-                    property.kyc.sellerapproved = false;
-                    property.kycId.seller = kycId;
-                    property.kycId.sellerapproved = false;
-                    property.status = 'SellerKYCSubmitted';
-                    matched = true;
+                    let matched = false;
+                    if (type === 'seller' && property.participants && property.participants.seller && property.participants.seller.id === partyId) {
+                        property.kyc = property.kyc || {};
+                        property.kycId = property.kycId || {};
+                        property.kyc.seller = kycId;
+                        property.kyc.sellerapproved = false;
+                        property.kycId.seller = kycId;
+                        property.kycId.sellerapproved = false;
+                        property.status = 'SellerKYCSubmitted';
+                        matched = true;
+                    }
+                    if (type === 'buyer' && property.participants && property.participants.buyer && property.participants.buyer.id === partyId) {
+                        property.kyc = property.kyc || {};
+                        property.kycId = property.kycId || {};
+                        property.kyc.buyer = kycId;
+                        property.kyc.buyerapproved = false;
+                        property.kycId.buyer = kycId;
+                        property.kycId.buyerapproved = false;
+                        property.status = 'BuyerKYCSubmitted';
+                        matched = true;
+                    }
+                    if (matched) {
+                        property.updatedAt = createdAt;
+                        await ctx.stub.putState(res.value.key, Buffer.from(JSON.stringify(property)));
+                        affectedProperties.push(property.id);
+                    }
+                } catch (e) {
+                    // ignore malformed property
                 }
-                if (type === 'buyer' && property.participants && property.participants.buyer && property.participants.buyer.id === partyId) {
-                    property.kyc = property.kyc || {};
-                    property.kycId = property.kycId || {};
-                    property.kyc.buyer = kycId;
-                    property.kyc.buyerapproved = false;
-                    property.kycId.buyer = kycId;
-                    property.kycId.buyerapproved = false;
-                    property.status = 'BuyerKYCSubmitted';
-                    matched = true;
-                }
-                if (matched) {
-                    property.updatedAt = createdAt;
-                    await ctx.stub.putState(res.value.key, Buffer.from(JSON.stringify(property)));
-                    affectedProperties.push(property.id);
-                }
-            } catch (e) {
-                // ignore malformed property
             }
+        } finally {
+            await iterator.close();
         }
-        await iterator.close();
 
         return JSON.stringify({ kycId, kyc, affectedProperties });
     }
-
     // ----------------------------
     // Attach solicitor for seller
     // ----------------------------
