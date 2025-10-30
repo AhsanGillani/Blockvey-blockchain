@@ -205,7 +205,12 @@ class PropertyContract extends Contract {
             throw new Error(`KYC ${kycId} already exists for party ${partyId} and type ${type}`);
         }
 
-        const payload = (typeof kycJson === 'string') ? JSON.parse(kycJson) : kycJson;
+        let payload;
+        try {
+            payload = (typeof kycJson === 'string') ? JSON.parse(kycJson) : kycJson;
+        } catch (e) {
+            throw new Error('Invalid kycJson payload; must be valid JSON string or object');
+        }
 
         const kyc = {
             id: kycId,
@@ -230,10 +235,18 @@ class PropertyContract extends Contract {
                 if (!res.value || !res.value.value) continue;
                 try {
                     const rawValue = res.value.value;
-                    if (!rawValue || (rawValue.length !== undefined && rawValue.length === 0)) {
+                    if (!rawValue) {
                         continue;
                     }
-                    const property = JSON.parse(rawValue.toString('utf8'));
+                    // Ensure rawValue exposes toString before calling it
+                    if (typeof rawValue.toString !== 'function') {
+                        continue;
+                    }
+                    const strVal = rawValue.toString('utf8');
+                    if (!strVal || strVal.length === 0) {
+                        continue;
+                    }
+                    const property = JSON.parse(strVal);
 
                     let matched = false;
                     if (type === 'seller' && property.participants && property.participants.seller && property.participants.seller.id === partyId) {
@@ -271,6 +284,7 @@ class PropertyContract extends Contract {
 
         return JSON.stringify({ kycId, kyc, affectedProperties });
     }
+
     // ----------------------------
     // Attach solicitor for seller
     // ----------------------------
