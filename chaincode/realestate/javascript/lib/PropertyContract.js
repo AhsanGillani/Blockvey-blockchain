@@ -225,7 +225,8 @@ class PropertyContract extends Contract {
         await ctx.stub.putState(`KYC::${kycId}`, Buffer.from(JSON.stringify(kyc)));
 
         // Search all properties for participant partyId
-        const iterator = await ctx.stub.getStateByRange('PROPERTY::', 'PROPERTY::z');
+        // Use '~' as high sort key to cap the PROPERTY namespace cleanly
+        const iterator = await ctx.stub.getStateByRange('PROPERTY::', 'PROPERTY::~');
         const affectedProperties = [];
 
         try {
@@ -234,18 +235,23 @@ class PropertyContract extends Contract {
                 if (res.done) break;
                 if (!res.value || !res.value.value) continue;
                 try {
-                    const rawValue = res.value.value;
-                    if (!rawValue) {
+                    const valueBytes = res.value.value;
+                    let strVal = '';
+                    try {
+                        if (Buffer.isBuffer(valueBytes)) {
+                            strVal = valueBytes.toString('utf8');
+                        } else if (typeof valueBytes === 'string') {
+                            strVal = valueBytes;
+                        } else if (valueBytes && typeof valueBytes === 'object' && typeof valueBytes.toString === 'function') {
+                            strVal = valueBytes.toString('utf8');
+                        } else {
+                            continue;
+                        }
+                    } catch (e) {
+                        // unsafe value; skip
                         continue;
                     }
-                    // Ensure rawValue exposes toString before calling it
-                    if (typeof rawValue.toString !== 'function') {
-                        continue;
-                    }
-                    const strVal = rawValue.toString('utf8');
-                    if (!strVal || strVal.length === 0) {
-                        continue;
-                    }
+                    if (!strVal) continue;
                     const property = JSON.parse(strVal);
 
                     let matched = false;
