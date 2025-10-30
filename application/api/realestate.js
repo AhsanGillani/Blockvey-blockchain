@@ -257,7 +257,7 @@ router.post("/transaction/:id/approve", async (req, res) => {
 // ----------------------------
 router.post("/kyc", async (req, res) => {
   try {
-    const { partyId, kycId, type, kycData, propertyId, createdAt } = req.body;
+    const { partyId, kycId, type, kycData, createdAt } = req.body;
     const contract = await getContract();
     const result = await contract.submitTransaction(
       "PropertyContract:submitKyc",
@@ -265,7 +265,6 @@ router.post("/kyc", async (req, res) => {
       kycId,
       type,
       typeof kycData === "string" ? kycData : JSON.stringify(kycData || {}),
-      propertyId,
       createdAt || new Date().toISOString()
     );
     res.json({ success: true, data: JSON.parse(result.toString()) });
