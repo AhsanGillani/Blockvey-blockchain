@@ -573,6 +573,7 @@ class PropertyContract extends Contract {
 
         // Optionally link to property by searching (caller can pass propertyId elsewhere). For convenience we do NOT link here.
         property.transactions.push(txnId);
+        property.status = step;
         property.updatedAt = createdAt;
         
         // Update progress
@@ -619,6 +620,18 @@ class PropertyContract extends Contract {
         // Update progress on the property
         const property = await this._getProperty(ctx, txn.propertyId);
         property.propertyprogressbar = await this._calculateProgress(ctx, property);
+        if (txn.step === 'buyer_to_buyer_sol') {
+            property.status = 'BuyerSolTransApproved';
+        }
+        else if (txn.step === 'buyer_sol_to_seller_sol') {
+            property.status = 'SellerSolTransApproved';
+        }
+        else if (txn.step === 'seller_sol_to_seller') {
+            property.status = 'SellerTransApproved';
+        }
+        else {
+            throw new Error(`Transaction step ${txn.step} not recognized`);
+        }
         await ctx.stub.putState(`PROPERTY::${txn.propertyId}`, Buffer.from(JSON.stringify(property)));
         
         return JSON.stringify(txn);
@@ -648,7 +661,7 @@ class PropertyContract extends Contract {
 
         // transfer ownership
         property.owner = contract.buyerName;
-        property.status = 'Completed';
+        property.status = 'OwnershipTransferred';
         property.updatedAt = updatedAt;
         property.propertyprogressbar = 100; // Final completion
 
@@ -792,7 +805,7 @@ class PropertyContract extends Contract {
             }
         }
         // Final transfer: 100%
-        else if (property.status === 'Completed') {
+        else if (property.status === 'OwnershipTransferred') {
             progress = 100;
         }
         
