@@ -38,7 +38,6 @@ class PropertyContract extends Contract {
             createdAt: now,
             updatedAt: now
         };
-
         //check if kyc already exists and approved by seller and buyer you have to add one more record during create property you have to attach the kyc id to the property and approved by seller and buyer mark as true
         const sellerkycKey = `KYC::${sellerkycId}`;
         const sellerkycData = await ctx.stub.getState(sellerkycKey);
@@ -50,21 +49,19 @@ class PropertyContract extends Contract {
                     property.kycId.sellerapproved = true;
                     property.kyc.seller = sellerkycId;
                     property.kyc.sellerapproved = true;
-                    property.status = 'SellerKYCApproved';
+
                 }
                 if (sellerkyc && sellerkyc.status === 'Pending') {
                     property.kycId.seller = sellerkycId;
                     property.kycId.sellerapproved = false;
                     property.kyc.seller = sellerkycId;
                     property.kyc.sellerapproved = false;
-                    property.status = 'SellerKYCPending';
                 }
                 if (sellerkyc && sellerkyc.status === 'Rejected') {
                     property.kycId.seller = sellerkycId;
                     property.kycId.sellerapproved = false;
                     property.kyc.seller = sellerkycId;
                     property.kyc.sellerapproved = false;
-                    property.status = 'SellerKYCRejected';
                 }
             } catch (e) {
                 // ignore malformed KYC payload
@@ -80,21 +77,18 @@ class PropertyContract extends Contract {
                     property.kycId.buyerapproved = true;
                     property.kyc.buyer = buyerkycId;
                     property.kyc.buyerapproved = true;
-                    property.status = 'BuyerKYCApproved';
                 }
                 if (buyerkyc && buyerkyc.status === 'Pending') {
                     property.kycId.buyer = buyerkycId;
                     property.kycId.buyerapproved = false;
                     property.kyc.buyer = buyerkycId;
                     property.kyc.buyerapproved = false;
-                    property.status = 'BuyerKYCPending';
                 }
                 if (buyerkyc && buyerkyc.status === 'Rejected') {
                     property.kycId.buyer = buyerkycId;
                     property.kycId.buyerapproved = false;
                     property.kyc.buyer = buyerkycId;
                     property.kyc.buyerapproved = false;
-                    property.status = 'BuyerKYCRejected';
                 }
             } catch (e) {
                 // ignore malformed KYC payload
@@ -140,21 +134,18 @@ class PropertyContract extends Contract {
                     property.kycId.sellerapproved = true;
                     property.kyc.seller = sellerkycId;
                     property.kyc.sellerapproved = true;
-                    property.status = 'SellerKYCApproved';
                 }
                 if (sellerkyc && sellerkyc.status === 'Pending') {
                     property.kycId.seller = sellerkycId;
                     property.kycId.sellerapproved = false;
                     property.kyc.seller = sellerkycId;
                     property.kyc.sellerapproved = false;
-                    property.status = 'SellerKYCPending';
                 }
                 if (sellerkyc && sellerkyc.status === 'Rejected') {
                     property.kycId.seller = sellerkycId;
                     property.kycId.sellerapproved = false;
                     property.kyc.seller = sellerkycId;
                     property.kyc.sellerapproved = false;
-                    property.status = 'SellerKYCRejected';
                 }
             } catch (e) {
                 // ignore malformed KYC payload
@@ -170,21 +161,18 @@ class PropertyContract extends Contract {
                     property.kycId.buyerapproved = true;
                     property.kyc.buyer = buyerkycId;
                     property.kyc.buyerapproved = true;
-                    property.status = 'BuyerKYCApproved';
                 }
                 if (buyerkyc && buyerkyc.status === 'Pending') {
                     property.kycId.buyer = buyerkycId;
                     property.kycId.buyerapproved = false;
                     property.kyc.buyer = buyerkycId;
                     property.kyc.buyerapproved = false;
-                    property.status = 'BuyerKYCPending';
                 }
                 if (buyerkyc && buyerkyc.status === 'Rejected') {
                     property.kycId.buyer = buyerkycId;
                     property.kycId.buyerapproved = false;
                     property.kyc.buyer = buyerkycId;
                     property.kyc.buyerapproved = false;
-                    property.status = 'BuyerKYCRejected';
                 }
             } catch (e) {
                 // ignore malformed KYC payload
