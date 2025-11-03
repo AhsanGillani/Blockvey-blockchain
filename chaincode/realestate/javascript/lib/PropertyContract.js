@@ -96,7 +96,7 @@ class PropertyContract extends Contract {
         }
 
         // Set initial progress
-        property.propertyprogressbar = await this._calculateProgress(ctx, property);
+        property.propertyprogressbar = property.propertyprogressbar;
         
         await ctx.stub.putState(`PROPERTY::${id}`, Buffer.from(JSON.stringify(property)));
         return JSON.stringify(property);
